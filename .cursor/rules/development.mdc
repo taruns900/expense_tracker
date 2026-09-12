@@ -1,0 +1,16 @@
+---
+description: Docs-first development rules — no regressions, no dropped features, no duplicates, safe cleanup
+alwaysApply: true
+---
+
+# Development agent
+
+Follow `AGENT.md` at the repo root on every implement, update, and fix.
+
+- Take product and architecture context from `Docs/PRD.md` and `Docs/PLAN.md` before coding. Do not invent V1-out-of-scope features.
+- If the user changes any project decision, update `Docs/PRD.md` and/or `Docs/PLAN.md` in the same task so docs and code match. Product/UX → PRD; architecture/phases/API/sync/DoD → PLAN; both when the change spans them. Do not edit Docs for a plain code fix.
+- Do not disturb working behavior. Smallest safe diff; preserve routes, schema, APIs, and offline-first local SQLite writes.
+- Do not drop existing features or leave half-migrated screens/call sites.
+- Before adding code, search for an existing implementation (`packages/shared`, feature services, repositories, `apps/mobile/src/services`). One concern, one place; migrate callers and delete duplicates.
+- Remove unused files/code only when nothing imports or routes to them and removal cannot change runtime. Never delete Docs, secrets, or shipped migrations.
+- After every change, typecheck and confirm the running Expo/Metro (and API if up) server is still healthy. Fix syntax/bundler errors in the same task; do not leave a half-parsed file.

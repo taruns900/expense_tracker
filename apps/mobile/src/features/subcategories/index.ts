@@ -1,0 +1,1 @@
+export { subCategoryService } from './subCategoryService';

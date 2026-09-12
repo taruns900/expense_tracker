@@ -1,0 +1,14 @@
+{
+  "name": "expense-tracker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Offline-first, cloud-backed mobile expense tracker",
+  "scripts": {
+    "start": "npm --prefix apps/mobile start",
+    "ios": "npm --prefix apps/mobile run ios",
+    "android": "npm --prefix apps/mobile run android",
+    "mobile": "npm --prefix apps/mobile start",
+    "api": "npm --prefix apps/api start",
+    "typecheck": "npm --prefix apps/mobile run typecheck && npm --prefix packages/shared run typecheck"
+  }
+}

@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Category {
+  id        String   @id
+  name      String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime
+  updatedAt DateTime
+  deletedAt DateTime?
+}
+
+model SubCategory {
+  id         String   @id
+  categoryId String
+  name       String
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime
+  updatedAt  DateTime
+  deletedAt  DateTime?
+}
+
+model Vendor {
+  id        String   @id
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  gstNumber String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime
+  updatedAt DateTime
+  deletedAt DateTime?
+}
+
+model Expense {
+  id             String   @id
+  expenseId      String   @unique
+  expenseDate    String
+  categoryId     String
+  subCategoryId  String?
+  amount         Float
+  description    String?
+  vendorId       String?
+  gstRate        Float?
+  gstAmount      Float?
+  paymentMethod  String
+  paymentStatus  String   @default("Paid")
+  billNumber     String?
+  notes          String?
+  createdAt      DateTime
+  updatedAt      DateTime
+  deletedAt      DateTime?
+}
+
+model ExpenseAttachment {
+  id              String   @id
+  expenseId       String
+  fileName        String
+  fileType        String
+  fileSize        Int
+  cloudObjectPath String?
+  createdAt       DateTime
+  updatedAt       DateTime
+  deletedAt       DateTime?
+}
+
+model BusinessProfile {
+  id           String   @id
+  businessName String?
+  address      String?
+  phone        String?
+  email        String?
+  gstNumber    String?
+  updatedAt    DateTime
+  createdAt    DateTime
+}
+
+model ChangeLog {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  operation  String
+  payload    String
+  updatedAt  DateTime
+  createdAt  DateTime @default(now())
+}
