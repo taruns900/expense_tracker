@@ -1,3 +1,4 @@
+/** Later version — Vendors are not linked from More and are not synced. */
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useLayoutEffect, useState } from 'react';

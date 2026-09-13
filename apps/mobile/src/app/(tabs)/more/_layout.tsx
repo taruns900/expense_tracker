@@ -17,9 +17,11 @@ export default function MoreStackLayout() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="categories" options={{ title: 'Categories' }} />
       <Stack.Screen name="subcategories" options={{ title: 'Subcategories' }} />
+      {/* Later version — Vendors and business profile.
       <Stack.Screen name="vendors" options={{ title: 'Vendors' }} />
-      <Stack.Screen name="reports" options={{ title: 'Reports' }} />
       <Stack.Screen name="business-profile" options={{ title: 'Business profile' }} />
+      */}
+      <Stack.Screen name="reports" options={{ title: 'Reports' }} />
       <Stack.Screen name="data-management" options={{ title: 'Data management' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
     </Stack>

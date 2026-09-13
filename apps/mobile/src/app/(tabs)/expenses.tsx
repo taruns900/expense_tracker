@@ -19,13 +19,12 @@ import { spacing } from '@/components/theme';
 import { categoryService } from '@/features/categories';
 import { expenseService } from '@/features/expenses';
 import { subCategoryService } from '@/features/subcategories';
-import { vendorService } from '@/features/vendors';
 import { pdfService } from '@/services/pdf';
-import { useUiStore } from '@/store';
+import { useSessionStore, useUiStore } from '@/store';
 import type { ExpenseListItem } from '@/types/expense';
 import type { ExpenseFilters } from '@/types/filters';
 import { hasActiveFilters } from '@/types/filters';
-import type { CategoryRecord, SubCategoryRecord, VendorRecord } from '@/types/masterData';
+import type { CategoryRecord, SubCategoryRecord } from '@/types/masterData';
 import { toUserMessage } from '@/utils/userError';
 
 export default function ExpensesScreen() {
@@ -34,18 +33,18 @@ export default function ExpensesScreen() {
   const setFilters = useUiStore((state) => state.setFilters);
   const searchQuery = useUiStore((state) => state.searchQuery);
   const setSearchQuery = useUiStore((state) => state.setSearchQuery);
+  const dataEpoch = useSessionStore((state) => state.dataEpoch);
   const [items, setItems] = useState<ExpenseListItem[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [draft, setDraft] = useState<ExpenseFilters>(filters);
-  const [picker, setPicker] = useState<null | 'category' | 'sub' | 'vendor' | 'method'>(null);
+  const [picker, setPicker] = useState<null | 'category' | 'sub' | 'method'>(null);
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategoryRecord[]>([]);
-  const [vendors, setVendors] = useState<VendorRecord[]>([]);
   const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setItems(await expenseService.list(filters, searchQuery));
-  }, [filters, searchQuery]);
+  }, [filters, searchQuery, dataEpoch]);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,7 +55,6 @@ export default function ExpensesScreen() {
   useFocusEffect(
     useCallback(() => {
       void categoryService.listActive().then(setCategories);
-      void vendorService.listActive().then(setVendors);
     }, []),
   );
 
@@ -70,7 +68,6 @@ export default function ExpensesScreen() {
 
   const categoryName = categories.find((item) => item.id === draft.categoryId)?.name;
   const subName = subcategories.find((item) => item.id === draft.subCategoryId)?.name;
-  const vendorName = vendors.find((item) => item.id === draft.vendorId)?.name;
 
   return (
     <Screen title="Expenses" subtitle="Search and filter expenses from this list.">
@@ -79,7 +76,7 @@ export default function ExpensesScreen() {
         label="Search"
         value={searchQuery}
         onChangeText={setSearchQuery}
-        placeholder="Expense ID, description, bill, vendor, category"
+        placeholder="Expense ID, description, bill, category"
       />
       <View style={styles.actions}>
         <IconButton
@@ -156,12 +153,14 @@ export default function ExpensesScreen() {
             onPress={() => setPicker('sub')}
           />
         ) : null}
+        {/* Later version — vendor filter
         <SelectField
           label="Vendor"
           value={vendorName}
           placeholder="Any"
           onPress={() => setPicker('vendor')}
         />
+        */}
         <SelectField
           label="Payment method"
           value={draft.paymentMethod}
@@ -203,6 +202,7 @@ export default function ExpensesScreen() {
         onClose={() => setPicker(null)}
         onSelect={(id) => setDraft((current) => ({ ...current, subCategoryId: id || undefined }))}
       />
+      {/* Later version — vendor filter
       <SelectModal
         visible={picker === 'vendor'}
         title="Vendor"
@@ -211,6 +211,7 @@ export default function ExpensesScreen() {
         onClose={() => setPicker(null)}
         onSelect={(id) => setDraft((current) => ({ ...current, vendorId: id || undefined }))}
       />
+      */}
       <SelectModal
         visible={picker === 'method'}
         title="Payment method"

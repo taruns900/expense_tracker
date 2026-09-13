@@ -6,6 +6,11 @@ import { UserFacingError } from '@/utils/userError';
 const ACCESS_KEY = 'et.accessToken';
 const REFRESH_KEY = 'et.refreshToken';
 
+type AuthResponse = {
+  accessToken: string;
+  refreshToken: string;
+};
+
 export async function getAccessToken(): Promise<string | null> {
   try {
     return await SecureStore.getItemAsync(ACCESS_KEY);
@@ -28,7 +33,31 @@ type RequestOptions = {
   method?: string;
   body?: unknown;
   auth?: boolean;
+  /** Internal: avoid infinite refresh loops. */
+  retried?: boolean;
 };
+
+async function refreshAccessToken(): Promise<boolean> {
+  try {
+    const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
+    if (!refreshToken) {
+      return false;
+    }
+    const tokens = await fetch(`${config.apiBaseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!tokens.ok) {
+      return false;
+    }
+    const payload = (await tokens.json()) as AuthResponse;
+    await setTokens(payload.accessToken, payload.refreshToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -50,8 +79,34 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new UserFacingError('Some changes couldn’t be synced. We’ll try again automatically.');
   }
 
+  if (response.status === 401 && options.auth !== false && !options.retried) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return apiRequest<T>(path, { ...options, retried: true });
+    }
+    throw new UserFacingError('Sign in again under Settings to sync with the cloud.');
+  }
+
   if (!response.ok) {
-    throw new UserFacingError('Some changes couldn’t be synced. We’ll try again automatically.');
+    let serverMessage: string | null = null;
+    try {
+      const payload = (await response.json()) as { message?: string | string[] };
+      if (typeof payload.message === 'string') {
+        serverMessage = payload.message;
+      } else if (Array.isArray(payload.message) && typeof payload.message[0] === 'string') {
+        serverMessage = payload.message[0];
+      }
+    } catch {
+      serverMessage = null;
+    }
+    if (options.auth === false && serverMessage) {
+      throw new UserFacingError(serverMessage);
+    }
+    throw new UserFacingError(
+      serverMessage && response.status === 403
+        ? serverMessage
+        : 'Some changes couldn’t be synced. We’ll try again automatically.',
+    );
   }
   if (response.status === 204) {
     return undefined as T;

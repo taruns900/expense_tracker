@@ -1,6 +1,16 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Inject,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { JwtAuthGuard, requireUserId, type AuthenticatedRequest } from './jwt-auth.guard';
 import { PrismaService } from './prisma.service';
 
 type SyncChange = {
@@ -11,18 +21,25 @@ type SyncChange = {
   data: Record<string, unknown>;
 };
 
+const SYNCABLE = new Set(['category', 'subcategory', 'expense']);
+
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class SyncController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prismaService: PrismaService) {}
 
   @Post('/sync')
-  async push(@Body() body: { changes?: SyncChange[] }) {
+  async push(@Req() request: AuthenticatedRequest, @Body() body: { changes?: SyncChange[] }) {
+    const userId = requireUserId(request);
     const changes = body.changes ?? [];
     for (const change of changes) {
-      await this.apply(change);
-      await this.prisma.changeLog.create({
+      if (!SYNCABLE.has(change.entityType)) {
+        continue;
+      }
+      await this.apply(userId, change);
+      await this.prismaService.changeLog.create({
         data: {
+          userId,
           entityType: change.entityType,
           entityId: change.entityId,
           operation: change.operation,
@@ -31,14 +48,15 @@ export class SyncController {
         },
       });
     }
-    return { accepted: changes.length };
+    return { accepted: changes.filter((change) => SYNCABLE.has(change.entityType)).length };
   }
 
   @Get('/sync/changes')
-  async pull(@Query('since') since?: string) {
+  async pull(@Req() request: AuthenticatedRequest, @Query('since') since?: string) {
+    const userId = requireUserId(request);
     const when = since ? new Date(since) : new Date(0);
-    const rows = await this.prisma.changeLog.findMany({
-      where: { createdAt: { gt: when } },
+    const rows = await this.prismaService.changeLog.findMany({
+      where: { userId, createdAt: { gt: when } },
       orderBy: { createdAt: 'asc' },
       take: 200,
     });
@@ -80,7 +98,7 @@ export class SyncController {
   }
   */
 
-  private async apply(change: SyncChange) {
+  private async apply(userId: string, change: SyncChange) {
     const data = change.data ?? {};
     const id = String(data.id ?? change.entityId);
     const updatedAt = new Date(String(data.updatedAt ?? change.updatedAt ?? Date.now()));
@@ -88,19 +106,24 @@ export class SyncController {
 
     if (change.entityType === 'category') {
       if (change.operation === 'DELETE') {
-        await this.prisma.category.updateMany({ where: { id }, data: { deletedAt: updatedAt, updatedAt } });
+        await this.prismaService.category.updateMany({
+          where: { userId, id },
+          data: { deletedAt: updatedAt, updatedAt },
+        });
         return;
       }
-      await this.prisma.category.upsert({
-        where: { id },
+      await this.prismaService.category.upsert({
+        where: { userId_id: { userId, id } },
         update: {
           name: String(data.name ?? ''),
           isActive: Boolean(data.isActive ?? true),
           sortOrder: Number(data.sortOrder ?? 0),
           updatedAt,
+          deletedAt: null,
         },
         create: {
           id,
+          userId,
           name: String(data.name ?? ''),
           isActive: Boolean(data.isActive ?? true),
           sortOrder: Number(data.sortOrder ?? 0),
@@ -112,54 +135,29 @@ export class SyncController {
 
     if (change.entityType === 'subcategory') {
       if (change.operation === 'DELETE') {
-        await this.prisma.subCategory.updateMany({ where: { id }, data: { deletedAt: updatedAt, updatedAt } });
+        await this.prismaService.subCategory.updateMany({
+          where: { userId, id },
+          data: { deletedAt: updatedAt, updatedAt },
+        });
         return;
       }
-      await this.prisma.subCategory.upsert({
-        where: { id },
+      await this.prismaService.subCategory.upsert({
+        where: { userId_id: { userId, id } },
         update: {
           categoryId: String(data.categoryId ?? ''),
           name: String(data.name ?? ''),
           isActive: Boolean(data.isActive ?? true),
           sortOrder: Number(data.sortOrder ?? 0),
           updatedAt,
+          deletedAt: null,
         },
         create: {
           id,
+          userId,
           categoryId: String(data.categoryId ?? ''),
           name: String(data.name ?? ''),
           isActive: Boolean(data.isActive ?? true),
           sortOrder: Number(data.sortOrder ?? 0),
-          createdAt,
-          updatedAt,
-        },
-      });
-    }
-
-    if (change.entityType === 'vendor') {
-      if (change.operation === 'DELETE') {
-        await this.prisma.vendor.updateMany({ where: { id }, data: { deletedAt: updatedAt, updatedAt } });
-        return;
-      }
-      await this.prisma.vendor.upsert({
-        where: { id },
-        update: {
-          name: String(data.name ?? ''),
-          email: data.email ? String(data.email) : null,
-          phone: data.phone ? String(data.phone) : null,
-          address: data.address ? String(data.address) : null,
-          gstNumber: data.gstNumber ? String(data.gstNumber) : null,
-          isActive: Boolean(data.isActive ?? true),
-          updatedAt,
-        },
-        create: {
-          id,
-          name: String(data.name ?? ''),
-          email: data.email ? String(data.email) : null,
-          phone: data.phone ? String(data.phone) : null,
-          address: data.address ? String(data.address) : null,
-          gstNumber: data.gstNumber ? String(data.gstNumber) : null,
-          isActive: Boolean(data.isActive ?? true),
           createdAt,
           updatedAt,
         },
@@ -167,11 +165,18 @@ export class SyncController {
     }
 
     if (change.entityType === 'expense') {
+      const existing = await this.prismaService.expense.findUnique({ where: { id } });
+      if (existing && existing.userId !== userId) {
+        throw new ForbiddenException('That record belongs to another account.');
+      }
       if (change.operation === 'DELETE') {
-        await this.prisma.expense.updateMany({ where: { id }, data: { deletedAt: updatedAt, updatedAt } });
+        await this.prismaService.expense.updateMany({
+          where: { id, userId },
+          data: { deletedAt: updatedAt, updatedAt },
+        });
         return;
       }
-      await this.prisma.expense.upsert({
+      await this.prismaService.expense.upsert({
         where: { id },
         update: {
           expenseId: String(data.expenseId ?? ''),
@@ -180,23 +185,25 @@ export class SyncController {
           subCategoryId: data.subCategoryId ? String(data.subCategoryId) : null,
           amount: Number(data.amount ?? 0),
           description: data.description ? String(data.description) : null,
-          vendorId: data.vendorId ? String(data.vendorId) : null,
+          vendorId: null,
           gstRate: data.gstRate === null || data.gstRate === undefined ? null : Number(data.gstRate),
           gstAmount: data.gstAmount === null || data.gstAmount === undefined ? null : Number(data.gstAmount),
           paymentMethod: String(data.paymentMethod ?? 'Other'),
           billNumber: data.billNumber ? String(data.billNumber) : null,
           notes: data.notes ? String(data.notes) : null,
           updatedAt,
+          deletedAt: null,
         },
         create: {
           id,
+          userId,
           expenseId: String(data.expenseId ?? id),
           expenseDate: String(data.expenseDate ?? ''),
           categoryId: String(data.categoryId ?? ''),
           subCategoryId: data.subCategoryId ? String(data.subCategoryId) : null,
           amount: Number(data.amount ?? 0),
           description: data.description ? String(data.description) : null,
-          vendorId: data.vendorId ? String(data.vendorId) : null,
+          vendorId: null,
           gstRate: data.gstRate === null || data.gstRate === undefined ? null : Number(data.gstRate),
           gstAmount: data.gstAmount === null || data.gstAmount === undefined ? null : Number(data.gstAmount),
           paymentMethod: String(data.paymentMethod ?? 'Other'),
@@ -208,28 +215,6 @@ export class SyncController {
       });
     }
 
-    if (change.entityType === 'business_profile') {
-      await this.prisma.businessProfile.upsert({
-        where: { id },
-        update: {
-          businessName: data.businessName ? String(data.businessName) : null,
-          address: data.address ? String(data.address) : null,
-          phone: data.phone ? String(data.phone) : null,
-          email: data.email ? String(data.email) : null,
-          gstNumber: data.gstNumber ? String(data.gstNumber) : null,
-          updatedAt,
-        },
-        create: {
-          id,
-          businessName: data.businessName ? String(data.businessName) : null,
-          address: data.address ? String(data.address) : null,
-          phone: data.phone ? String(data.phone) : null,
-          email: data.email ? String(data.email) : null,
-          gstNumber: data.gstNumber ? String(data.gstNumber) : null,
-          createdAt,
-          updatedAt,
-        },
-      });
-    }
+    // Vendor and business_profile sync are deferred to a later version.
   }
 }

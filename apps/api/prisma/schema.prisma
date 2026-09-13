@@ -8,69 +8,88 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String        @id @default(uuid())
+  email         String        @unique
+  passwordHash  String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  categories    Category[]
+  subCategories SubCategory[]
+  expenses      Expense[]
+  changeLogs    ChangeLog[]
 }
 
 model Category {
-  id        String   @id
+  id        String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
-  isActive  Boolean  @default(true)
-  sortOrder Int      @default(0)
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
   createdAt DateTime
   updatedAt DateTime
   deletedAt DateTime?
+
+  @@id([userId, id])
+  @@index([userId])
 }
 
 model SubCategory {
-  id         String   @id
+  id         String
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   categoryId String
   name       String
-  isActive   Boolean  @default(true)
-  sortOrder  Int      @default(0)
+  isActive   Boolean   @default(true)
+  sortOrder  Int       @default(0)
   createdAt  DateTime
   updatedAt  DateTime
   deletedAt  DateTime?
+
+  @@id([userId, id])
+  @@index([userId])
 }
 
 model Vendor {
-  id        String   @id
+  id        String    @id
   name      String
   email     String?
   phone     String?
   address   String?
   gstNumber String?
-  isActive  Boolean  @default(true)
+  isActive  Boolean   @default(true)
   createdAt DateTime
   updatedAt DateTime
   deletedAt DateTime?
 }
 
 model Expense {
-  id             String   @id
-  expenseId      String   @unique
-  expenseDate    String
-  categoryId     String
-  subCategoryId  String?
-  amount         Float
-  description    String?
-  vendorId       String?
-  gstRate        Float?
-  gstAmount      Float?
-  paymentMethod  String
-  paymentStatus  String   @default("Paid")
-  billNumber     String?
-  notes          String?
-  createdAt      DateTime
-  updatedAt      DateTime
-  deletedAt      DateTime?
+  id            String    @id
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenseId     String
+  expenseDate   String
+  categoryId    String
+  subCategoryId String?
+  amount        Float
+  description   String?
+  vendorId      String?
+  gstRate       Float?
+  gstAmount     Float?
+  paymentMethod String
+  paymentStatus String    @default("Paid")
+  billNumber    String?
+  notes         String?
+  createdAt     DateTime
+  updatedAt     DateTime
+  deletedAt     DateTime?
+
+  @@unique([userId, expenseId])
+  @@index([userId])
 }
 
 model ExpenseAttachment {
-  id              String   @id
+  id              String    @id
   expenseId       String
   fileName        String
   fileType        String
@@ -94,10 +113,14 @@ model BusinessProfile {
 
 model ChangeLog {
   id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   entityType String
   entityId   String
   operation  String
   payload    String
   updatedAt  DateTime
   createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

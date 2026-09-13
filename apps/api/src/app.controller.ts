@@ -1,9 +1,20 @@
-import { Body, Controller, Get, Post, UnauthorizedException, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  Inject,
+  Post,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { IsEmail, IsString, MinLength } from 'class-validator';
 
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { JwtAuthGuard, requireUserId, type AuthenticatedRequest } from './jwt-auth.guard';
 import { PrismaService } from './prisma.service';
 
 class AuthDto {
@@ -18,8 +29,8 @@ class AuthDto {
 @Controller()
 export class AppController {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
+    @Inject(PrismaService) private readonly prismaService: PrismaService,
+    @Inject(JwtService) private readonly jwtService: JwtService,
   ) {}
 
   @Get('/health')
@@ -41,15 +52,22 @@ export class AppController {
   @Post('/auth/register')
   async register(@Body() body: AuthDto) {
     const passwordHash = await bcrypt.hash(body.password, 10);
-    const user = await this.prisma.user.create({
-      data: { email: body.email.toLowerCase(), passwordHash },
-    });
-    return this.tokens(user.id, user.email);
+    try {
+      const user = await this.prismaService.user.create({
+        data: { email: body.email.toLowerCase(), passwordHash },
+      });
+      return this.tokens(user.id, user.email);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('An account with that email already exists.');
+      }
+      throw error;
+    }
   }
 
   @Post('/auth/login')
   async login(@Body() body: AuthDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: body.email.toLowerCase() } });
+    const user = await this.prismaService.user.findUnique({ where: { email: body.email.toLowerCase() } });
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
       throw new UnauthorizedException('Invalid email or password.');
     }
@@ -58,13 +76,23 @@ export class AppController {
 
   @Post('/auth/refresh')
   async refresh(@Body() body: { refreshToken?: string }) {
-    const payload = this.jwt.verify<{ sub: string; email: string }>(body.refreshToken ?? '');
+    const payload = this.jwtService.verify<{ sub: string; email: string }>(body.refreshToken ?? '');
     return this.tokens(payload.sub, payload.email);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('/auth/me')
+  me(@Req() request: AuthenticatedRequest) {
+    const userId = requireUserId(request);
+    return { userId, email: request.user?.email ?? '' };
+  }
+
   private tokens(userId: string, email: string) {
-    const accessToken = this.jwt.sign({ sub: userId, email });
-    const refreshToken = this.jwt.sign({ sub: userId, email, typ: 'refresh' }, { expiresIn: '30d' as const });
-    return { accessToken, refreshToken };
+    const accessToken = this.jwtService.sign({ sub: userId, email });
+    const refreshToken = this.jwtService.sign(
+      { sub: userId, email, typ: 'refresh' },
+      { expiresIn: '30d' as const },
+    );
+    return { accessToken, refreshToken, userId, email };
   }
 }

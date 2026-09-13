@@ -8,10 +8,13 @@ import { Card, IconButton, Screen } from '@/components';
 import { MonthScroller } from '@/components/MonthScroller';
 import { colors, spacing, typography } from '@/components/theme';
 import { dashboardService } from '@/features/dashboard';
+import { useSessionStore } from '@/store';
 import { formatInr } from '@/utils/money';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const cloudUserId = useSessionStore((state) => state.cloudUserId);
+  const dataEpoch = useSessionStore((state) => state.dataEpoch);
   const [summary, setSummary] = useState({ todayTotal: 0, weekTotal: 0, monthTotal: 0, yearTotal: 0 });
   const [last7Days, setLast7Days] = useState<Array<{ label: string; total: number }>>([]);
   const [months, setMonths] = useState<Array<{ key: string; label: string; total: number }>>([]);
@@ -36,7 +39,7 @@ export default function HomeScreen() {
     setMonths(nextMonths);
     setTop(nextTop);
     setMom(nextMom);
-  }, []);
+  }, [dataEpoch]);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,6 +60,15 @@ export default function HomeScreen() {
         />
       }>
       <ScrollView nestedScrollEnabled contentContainerStyle={styles.body}>
+        {cloudUserId ? null : (
+          <Card>
+            <Text style={styles.section}>Cloud sync</Text>
+            <Text style={styles.hint}>
+              Sign in under More → Settings to keep this account’s data separate in the cloud. You can
+              keep recording on this device without an account.
+            </Text>
+          </Card>
+        )}
         <View style={styles.grid}>
           <Card style={styles.stat}>
             <Text style={styles.statLabel}>Today</Text>

@@ -5,6 +5,7 @@ export { expenseRepository } from './expenseRepository';
 export { subCategoryRepository } from './subCategoryRepository';
 export {
   enqueueSync,
+  resetStuckSyncingItems,
   listDrainable,
   listSyncQueue,
   queueCounts,

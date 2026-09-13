@@ -1,8 +1,8 @@
 # Expense Tracker
 
-Offline-first, cloud-backed **mobile** expense tracker for one or two business owners.
+Offline-first, cloud-backed **mobile** expense tracker. Each signed-in account has its own Neon data.
 
-Record expenses on device (SQLite) even without internet. When a network is available, the NestJS API on **Render** syncs **records** to **Neon PostgreSQL**. Receipt photos/PDFs are planned for **V2** (not in the V1 MVP).
+Record expenses on device (SQLite) even without internet. When a network is available, the NestJS API on **Render** syncs **that account’s records** to **Neon PostgreSQL**. Vendors and business profile are deferred. Receipt photos/PDFs are planned for **V2**.
 
 Product rules: [`Docs/PRD.md`](Docs/PRD.md). How to build it: [`Docs/PLAN.md`](Docs/PLAN.md). Agent rules: [`AGENT.md`](AGENT.md).
 
@@ -64,6 +64,6 @@ API typecheck: `npm --prefix apps/api run typecheck`.
 - Bottom tabs: **Home**, **Add**, **More**
 - Home: totals, month comparison, top 5 categories, weekly/monthly history; history icon opens the expense list
 - Add: tapping the center tab opens a tall centered fade-in popup with all expense fields; after save a Successful confirmation lists entered details and Done returns to Home.
-- More: expenses (search, filters, PDF export), categories, vendors, reports, profile, data, settings
+- More: expenses (search, filters, PDF export), categories, subcategories, reports, data, settings (login)
 
 The UI is offline-first: screens read and write SQLite first; sync runs in the background.

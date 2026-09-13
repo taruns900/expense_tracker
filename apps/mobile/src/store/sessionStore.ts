@@ -5,9 +5,15 @@ type SessionState = {
   isDatabaseReady: boolean;
   databaseError: string | null;
   schemaVersion: number | null;
+  cloudUserId: string | null;
+  cloudEmail: string | null;
+  dataEpoch: number;
   markHydrated: () => void;
   markDatabaseReady: (schemaVersion: number) => void;
   markDatabaseError: (message: string) => void;
+  setCloudSession: (userId: string, email: string) => void;
+  clearCloudSession: () => void;
+  bumpDataEpoch: () => void;
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -15,6 +21,9 @@ export const useSessionStore = create<SessionState>((set) => ({
   isDatabaseReady: false,
   databaseError: null,
   schemaVersion: null,
+  cloudUserId: null,
+  cloudEmail: null,
+  dataEpoch: 0,
   markHydrated: () => set({ isHydrated: true }),
   markDatabaseReady: (schemaVersion) =>
     set({
@@ -29,4 +38,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       databaseError: message,
       isHydrated: true,
     }),
+  setCloudSession: (userId, email) => set({ cloudUserId: userId, cloudEmail: email }),
+  clearCloudSession: () => set({ cloudUserId: null, cloudEmail: null }),
+  bumpDataEpoch: () => set((state) => ({ dataEpoch: state.dataEpoch + 1 })),
 }));

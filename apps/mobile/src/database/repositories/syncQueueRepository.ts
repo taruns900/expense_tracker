@@ -73,6 +73,17 @@ export async function listSyncQueue(): Promise<SyncQueueRecord[]> {
   }));
 }
 
+export async function resetStuckSyncingItems(): Promise<void> {
+  if (!isDatabaseAvailable()) {
+    return;
+  }
+  const timestamp = nowIso();
+  await getDatabase().runAsync(
+    "UPDATE sync_queue SET status = 'PENDING', updated_at = ? WHERE status = 'SYNCING'",
+    timestamp,
+  );
+}
+
 export async function listDrainable(): Promise<SyncQueueRecord[]> {
   const items = await listSyncQueue();
   const rank: Record<string, number> = {

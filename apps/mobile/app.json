@@ -15,7 +15,11 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.taruns900.expensetracker"
     },
     "web": {
       "bundler": "metro",
@@ -51,6 +55,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1be58dee-43b1-4819-b3b2-8e6f56444a28"
+      }
     }
   }
 }

@@ -1,5 +1,5 @@
 import { getDatabase, isDatabaseAvailable } from '@/database';
-import { enqueueSync, vendorRepository } from '@/database/repositories';
+import { vendorRepository } from '@/database/repositories';
 import type { VendorRecord } from '@/types/masterData';
 import { createId } from '@/utils/ids';
 import { normalizeName, nowIso } from '@/utils/text';
@@ -55,12 +55,13 @@ export const vendorService = {
 
     await getDatabase().withTransactionAsync(async () => {
       await vendorRepository.insert(record);
-      await enqueueSync({
-        entityType: 'vendor',
-        entityId: record.id,
-        operation: 'CREATE',
-        payload: record,
-      });
+      // Later version — vendor cloud sync
+      // await enqueueSync({
+      //   entityType: 'vendor',
+      //   entityId: record.id,
+      //   operation: 'CREATE',
+      //   payload: record,
+      // });
     });
 
     return record;
@@ -94,12 +95,7 @@ export const vendorService = {
 
     await getDatabase().withTransactionAsync(async () => {
       await vendorRepository.update(updated);
-      await enqueueSync({
-        entityType: 'vendor',
-        entityId: updated.id,
-        operation: 'UPDATE',
-        payload: updated,
-      });
+      // Later version — vendor cloud sync
     });
   },
 
@@ -125,12 +121,7 @@ export const vendorService = {
 
     await getDatabase().withTransactionAsync(async () => {
       await vendorRepository.update(updated);
-      await enqueueSync({
-        entityType: 'vendor',
-        entityId: updated.id,
-        operation: 'UPDATE',
-        payload: updated,
-      });
+      // Later version — vendor cloud sync
     });
   },
 };

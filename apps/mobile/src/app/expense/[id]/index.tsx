@@ -59,7 +59,9 @@ export default function ExpenseDetailScreen() {
         <Field label="Date" value={formatDisplayDate(expense.expenseDate)} />
         <Field label="Category" value={expense.categoryName} />
         <Field label="Subcategory" value={expense.subCategoryName} />
+        {/* Later version — vendor field
         <Field label="Vendor" value={expense.vendorName} />
+        */}
         <Field label="Payment method" value={expense.paymentMethod} />
         <Field
           label="GST"

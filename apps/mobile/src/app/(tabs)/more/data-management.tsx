@@ -7,11 +7,15 @@ import { colors, spacing, typography } from '@/components/theme';
 import { config } from '@/config/env';
 import { exportService } from '@/services/export';
 import { syncEngine } from '@/services/sync';
+import { useSessionStore } from '@/store';
 import { toUserMessage } from '@/utils/userError';
 
 export default function DataManagementScreen() {
+  const cloudEmail = useSessionStore((state) => state.cloudEmail);
+  const cloudUserId = useSessionStore((state) => state.cloudUserId);
   const [counts, setCounts] = useState({ pending: 0, failed: 0, synced: 0 });
   const [online, setOnline] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setCounts(await syncEngine.status());
@@ -27,6 +31,9 @@ export default function DataManagementScreen() {
   return (
     <View style={styles.wrap}>
       <Text style={styles.title}>Sync status</Text>
+      <Text style={styles.body}>
+        Account: {cloudUserId ? cloudEmail || 'Signed in' : 'Not signed in (local only)'}
+      </Text>
       <Text style={styles.body}>Cloud mode: {config.cloudMode}</Text>
       <Text style={styles.body}>API: {config.apiBaseUrl}</Text>
       <Text style={styles.body}>Network: {online ? 'Available' : 'Offline or unknown'}</Text>
@@ -38,13 +45,24 @@ export default function DataManagementScreen() {
         try again automatically.
       </Text>
       <Button
-        label="Try sync now"
+        label={syncing ? 'Syncing…' : 'Try sync now'}
+        disabled={syncing}
         onPress={() => {
+          setSyncing(true);
           void syncEngine
-            .run()
-            .then(load)
+            .run({ manual: true })
+            .then(async () => {
+              await load();
+              Alert.alert('Sync', 'Your latest changes are synced with the cloud.');
+            })
             .catch((error) => {
-              Alert.alert('Sync', toUserMessage(error, 'Some changes couldn’t be synced. We’ll try again automatically.'));
+              Alert.alert(
+                'Sync',
+                toUserMessage(error, 'Some changes couldn’t be synced. We’ll try again automatically.'),
+              );
+            })
+            .finally(() => {
+              setSyncing(false);
             });
         }}
       />

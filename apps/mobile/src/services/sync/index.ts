@@ -1,20 +1,21 @@
 import * as Network from 'expo-network';
 
-import { getDatabase, isDatabaseAvailable } from '@/database';
+import { APP_META_KEYS, getAppMeta, getDatabase, isDatabaseAvailable, setAppMeta } from '@/database';
 import {
-  attachmentRepository,
-  businessProfileRepository,
   categoryRepository,
   expenseRepository,
   listDrainable,
   queueCounts,
+  resetStuckSyncingItems,
   subCategoryRepository,
   updateQueueStatus,
-  vendorRepository,
 } from '@/database/repositories';
 import type { SyncQueueRecord } from '@/database/repositories/syncQueueRepository';
 import { apiRequest, getAccessToken } from '@/services/api';
+import type { LocalExpense } from '@/types/expense';
 import { nowIso } from '@/utils/text';
+import { UserFacingError } from '@/utils/userError';
+import type { GstRate, PaymentMethod } from '@expense-tracker/shared';
 
 type SyncChange = {
   entityType: string;
@@ -24,12 +25,63 @@ type SyncChange = {
   data: Record<string, unknown>;
 };
 
+type SyncRunOptions = {
+  /** When true, surface errors instead of failing silently (manual sync button). */
+  manual?: boolean;
+};
+
+const SYNC_FAILURE_MESSAGE =
+  'Some changes couldn’t be synced. We’ll try again automatically.';
+
+const CLOUD_ENTITY_TYPES = new Set(['category', 'subcategory', 'expense']);
+
+const APPLY_ORDER: Record<string, number> = {
+  category: 0,
+  subcategory: 1,
+  expense: 2,
+};
+
 function parsePayload(item: SyncQueueRecord): Record<string, unknown> {
   try {
     return JSON.parse(item.payload) as Record<string, unknown>;
   } catch {
     return { id: item.entityId };
   }
+}
+
+function requireManualPreconditions(options?: SyncRunOptions): void {
+  if (!options?.manual) {
+    return;
+  }
+  if (!isDatabaseAvailable()) {
+    throw new UserFacingError('This action is available on iOS and Android.');
+  }
+}
+
+function assertManualSyncReady(online: boolean, hasToken: boolean, options?: SyncRunOptions): void {
+  if (!options?.manual) {
+    return;
+  }
+  if (!online) {
+    throw new UserFacingError('Connect to the internet to sync.');
+  }
+  if (!hasToken) {
+    throw new UserFacingError('Sign in under Settings to sync with the cloud.');
+  }
+}
+
+async function pullChanges(): Promise<void> {
+  const since = await getAppMeta(APP_META_KEYS.syncSince);
+  const result = await apiRequest<{ changes: SyncChange[]; cursor: string }>(
+    `/sync/changes?since=${encodeURIComponent(since ?? '')}`,
+  );
+  const ordered = [...result.changes].sort(
+    (a, b) => (APPLY_ORDER[a.entityType] ?? 9) - (APPLY_ORDER[b.entityType] ?? 9),
+  );
+  for (const change of ordered) {
+    await applyRemoteChange(change);
+  }
+  await setAppMeta(APP_META_KEYS.syncSince, result.cursor);
 }
 
 export const syncEngine = {
@@ -44,18 +96,36 @@ export const syncEngine = {
 
   status: () => queueCounts(),
 
-  async run(): Promise<void> {
+  async pullFromCloud(): Promise<void> {
+    if (!isDatabaseAvailable() || !(await getAccessToken())) {
+      return;
+    }
+    await pullChanges();
+  },
+
+  async run(options?: SyncRunOptions): Promise<void> {
+    requireManualPreconditions(options);
+
     if (!isDatabaseAvailable()) {
       return;
     }
-    if (!(await this.isOnline())) {
-      return;
-    }
-    if (!(await getAccessToken())) {
+
+    await resetStuckSyncingItems();
+
+    const online = await this.isOnline();
+    const hasToken = Boolean(await getAccessToken());
+    if (!online || !hasToken) {
+      assertManualSyncReady(online, hasToken, options);
       return;
     }
 
-    const items = await listDrainable();
+    const queued = await listDrainable();
+    const parked = queued.filter((item) => !CLOUD_ENTITY_TYPES.has(item.entityType));
+    for (const item of parked) {
+      await updateQueueStatus(item.id, 'SYNCED');
+    }
+
+    const items = queued.filter((item) => CLOUD_ENTITY_TYPES.has(item.entityType));
     if (items.length > 0) {
       const changes: SyncChange[] = items.map((item) => ({
         entityType: item.entityType,
@@ -74,41 +144,49 @@ export const syncEngine = {
         for (const item of items) {
           await updateQueueStatus(item.id, 'SYNCED');
         }
-      } catch {
+      } catch (error) {
         for (const item of items) {
           await updateQueueStatus(item.id, 'FAILED', item.retryCount + 1);
+        }
+        if (options?.manual) {
+          throw error instanceof UserFacingError
+            ? error
+            : new UserFacingError(SYNC_FAILURE_MESSAGE);
         }
       }
     }
 
     try {
-      const since = await getDatabase().getFirstAsync<{ value: string }>(
-        "SELECT value FROM app_meta WHERE key = 'sync_since'",
-      );
-      const result = await apiRequest<{ changes: SyncChange[]; cursor: string }>(
-        `/sync/changes?since=${encodeURIComponent(since?.value ?? '')}`,
-      );
-      for (const change of result.changes) {
-        await applyRemoteChange(change);
+      await pullChanges();
+    } catch (error) {
+      if (options?.manual) {
+        throw error instanceof UserFacingError
+          ? error
+          : new UserFacingError(SYNC_FAILURE_MESSAGE);
       }
-      await getDatabase().runAsync(
-        `INSERT INTO app_meta (key, value) VALUES ('sync_since', ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        result.cursor,
-      );
-    } catch {
-      // Pull can wait until the API is configured.
     }
   },
 };
 
 async function applyRemoteChange(change: SyncChange): Promise<void> {
-  const data = change.data;
+  const data = change.data ?? {};
   const timestamp = nowIso();
-  if (change.entityType === 'category' && change.operation !== 'DELETE') {
-    const existing = await categoryRepository.getById(String(data.id));
+  const id = String(data.id ?? change.entityId);
+
+  if (change.entityType === 'category') {
+    if (change.operation === 'DELETE') {
+      await getDatabase().runAsync(
+        'UPDATE categories SET deleted_at = ?, sync_status = ?, updated_at = ? WHERE id = ?',
+        timestamp,
+        'SYNCED',
+        timestamp,
+        id,
+      );
+      return;
+    }
+    const existing = await categoryRepository.getById(id);
     const record = {
-      id: String(data.id),
+      id,
       name: String(data.name ?? ''),
       isActive: Boolean(data.isActive ?? true),
       sortOrder: Number(data.sortOrder ?? 0),
@@ -122,11 +200,68 @@ async function applyRemoteChange(change: SyncChange): Promise<void> {
       await categoryRepository.update(record);
     }
   }
-  if (change.entityType === 'expense' && change.operation === 'DELETE') {
-    await expenseRepository.softDelete(change.entityId, timestamp);
+
+  if (change.entityType === 'subcategory') {
+    if (change.operation === 'DELETE') {
+      await getDatabase().runAsync(
+        'UPDATE sub_categories SET deleted_at = ?, sync_status = ?, updated_at = ? WHERE id = ?',
+        timestamp,
+        'SYNCED',
+        timestamp,
+        id,
+      );
+      return;
+    }
+    const existing = await subCategoryRepository.getById(id);
+    const record = {
+      id,
+      categoryId: String(data.categoryId ?? ''),
+      name: String(data.name ?? ''),
+      isActive: Boolean(data.isActive ?? true),
+      sortOrder: Number(data.sortOrder ?? 0),
+      syncStatus: 'SYNCED' as const,
+      createdAt: String(data.createdAt ?? timestamp),
+      updatedAt: String(data.updatedAt ?? timestamp),
+    };
+    if (!existing) {
+      await subCategoryRepository.insert(record);
+    } else if (record.updatedAt >= existing.updatedAt) {
+      await subCategoryRepository.update(record);
+    }
   }
-  void attachmentRepository;
-  void businessProfileRepository;
-  void subCategoryRepository;
-  void vendorRepository;
+
+  if (change.entityType === 'expense') {
+    if (change.operation === 'DELETE') {
+      await expenseRepository.softDelete(id, timestamp);
+      return;
+    }
+    const existing = await expenseRepository.getById(id);
+    const record: LocalExpense = {
+      id,
+      expenseId: String(data.expenseId ?? id),
+      expenseDate: String(data.expenseDate ?? ''),
+      categoryId: String(data.categoryId ?? ''),
+      subCategoryId: data.subCategoryId ? String(data.subCategoryId) : null,
+      amount: Number(data.amount ?? 0),
+      description: data.description ? String(data.description) : null,
+      vendorId: null,
+      gstRate: data.gstRate === null || data.gstRate === undefined ? null : (Number(data.gstRate) as GstRate),
+      gstAmount: data.gstAmount === null || data.gstAmount === undefined ? null : Number(data.gstAmount),
+      paymentMethod: String(data.paymentMethod ?? 'Other') as PaymentMethod,
+      billNumber: data.billNumber ? String(data.billNumber) : null,
+      notes: data.notes ? String(data.notes) : null,
+      syncStatus: 'SYNCED',
+      createdAt: String(data.createdAt ?? timestamp),
+      updatedAt: String(data.updatedAt ?? timestamp),
+    };
+    const category = await categoryRepository.getById(record.categoryId);
+    if (!category) {
+      return;
+    }
+    if (!existing) {
+      await expenseRepository.insert(record);
+    } else if (record.updatedAt >= existing.updatedAt) {
+      await expenseRepository.update(record);
+    }
+  }
 }

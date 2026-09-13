@@ -27,6 +27,7 @@ The application allows users to:
 - Optionally associate vendors
 - Record payment information
 - Record GST information
+- Sign in so cloud data stays isolated per account
 - Attach photos and PDF bills/receipts (**V2**)
 - Search and filter expenses
 - View expense history
@@ -37,7 +38,7 @@ The application is **offline-first**.
 
 This means the application must remain fully usable when there is no internet connection. Data is first written to the local SQLite database and synchronized with the cloud when internet connectivity is available.
 
-Unlike a purely offline application, the V1 MVP syncs **structured data** (expenses, categories, vendors, profile) to **Neon PostgreSQL** via **NestJS on Render**. Receipt attachments are **not in V1**; they are planned for **V2** (on-device files, no cloud upload in the first V2 slice).
+Unlike a purely offline application, the V1 MVP syncs **structured data** (expenses, categories, subcategories) to **Neon PostgreSQL** via **NestJS on Render**, **scoped to the signed-in user**. **Vendors and business profile are deferred** to a later version (schema and screens stay in the repo, unlinked). Receipt attachments are **not in V1**; they are planned for **V2** (on-device files, no cloud upload in the first V2 slice).
 
 ---
 
@@ -129,7 +130,6 @@ Offline operations include:
 - View dashboard
 - Manage categories
 - Manage subcategories
-- Manage vendors
 - Generate expense PDF
 - Generate expense reports where data is locally available
 
@@ -191,7 +191,7 @@ The following are not required initially:
 - Syncing receipt files to a second device
 - **Expense receipt attachments** (photos/PDFs on expenses) — **V2** (see sections 21–24)
 
-The system is initially intended for one or two business owners.
+The system is initially intended for individual business owners, each with their own cloud account. A later version may let two owners share one business; V1 does **not** share Neon rows across logins.
 
 V1 dashboard metrics are calculated locally from SQLite. AI insights on payment history are a **possible later addition**, not a V1 requirement (see Future AI Insights).
 
@@ -348,11 +348,9 @@ Business owner responsible for recording and monitoring business expenses.
 
 ## Secondary user
 
-A second business owner who requires access to the same business data.
+Not in this slice. Each login has a separate cloud dataset. Shared-business membership is a later version.
 
-Both users initially have the same permissions.
-
-There is no need for a complex role hierarchy in V1.
+There is no role hierarchy in V1.
 
 ---
 
@@ -1311,9 +1309,7 @@ The More section can contain:
 Expenses
 Categories
 Subcategories
-Vendors
 Reports
-Business Profile
 Data Management
 Settings
 ```
@@ -1324,7 +1320,9 @@ Less frequently used functionality should remain here rather than cluttering the
 
 # 46. Business Profile
 
-The business profile should contain:
+**Deferred to a later version.** SQLite/Prisma tables and the More screen remain in the repo but are not linked from navigation and are not synced.
+
+When re-enabled, the business profile should contain:
 
 ```text
 Business Name
@@ -1358,26 +1356,27 @@ Manual data export is still recommended as an additional safety mechanism.
 
 # 48. Security
 
-Since the application contains financial information, basic authentication should be implemented.
+Since the application contains financial information, **JWT authentication** is required for cloud sync.
 
 Recommended:
 
 ```text
-Login
+Use app offline (SQLite)
    ↓
-Authentication
+Register or log in (Settings)
    ↓
-Access Mobile App
+Sync only that account’s rows on Neon
 ```
 
-Potential app protection:
+Rules:
 
-- PIN
-- Biometric authentication
+- The app stays usable **offline without an account**. Cloud push/pull requires sign-in.
+- Neon rows for expenses, categories, subcategories, and the change log carry **`userId` from the JWT**. The client cannot choose another user’s id.
+- `GET /sync/changes` returns only the signed-in user’s changes. Users never see another account’s data.
+- Logging out **clears data on this device** (cloud data stays on the account). Signing back in **pulls that account** from the cloud. Signing in as a **different** account also replaces local data.
+- Tokens are stored in secure storage. Optional PIN / biometric app lock is device protection only; it does not separate Neon tenants.
 
-Both users initially have equivalent permissions.
-
-No complicated RBAC system is required.
+No complicated RBAC system is required. Shared-business access is out of this slice.
 
 ---
 
@@ -2076,7 +2075,7 @@ The MVP is complete when the user can:
 4. Enter amount.
 5. Select payment method.
 6. Add optional subcategory.
-7. Add optional vendor.
+7. Add optional vendor (**later version**; not in the current UI).
 8. Add optional GST.
 9. Add description (maximum 200 characters).
 10. Add bill number.
@@ -2109,9 +2108,9 @@ The MVP is complete when the user can:
 32. Create subcategories.
 33. Edit subcategories.
 34. Deactivate subcategories.
-35. Create vendors.
-36. Edit vendors.
-37. Deactivate vendors.
+35. Create vendors. (**later version**)
+36. Edit vendors. (**later version**)
+37. Deactivate vendors. (**later version**)
 
 ### Documents (V1)
 
@@ -2126,9 +2125,10 @@ The MVP is complete when the user can:
 
 ### Cloud (V1)
 
-43. Synchronize expenses with the backend (Render → Neon).
-44. Synchronize categories.
-45. Synchronize vendors.
+43. Synchronize expenses with the backend (Render → Neon), **scoped to the signed-in user**.
+44. Synchronize categories (and subcategories).
+45. Synchronize vendors. (**later version**)
+45a. Register / log in; cloud data is isolated per account.
 46. Retry failed synchronization.
 47. Prevent duplicate records.
 
@@ -2305,9 +2305,9 @@ Post-V1 (optional, not scheduled):
 
 > **An offline-first, cloud-backed, mobile-only business expense management application for one or two business owners.**
 
-The application provides fast expense entry with **date, category, amount, and payment method as mandatory fields**, while keeping vendor, subcategory, GST, description (maximum 200 characters), and bill number optional. Expense date cannot be in the future. There is no notes field on expenses. **Receipt attachments are V2.**
+The application provides fast expense entry with **date, category, amount, and payment method as mandatory fields**, while keeping subcategory, GST, description (maximum 200 characters), and bill number optional. Vendor and business profile are **deferred**. Expense date cannot be in the future. There is no notes field on expenses. **Receipt attachments are V2.**
 
-Users manage categories, subcategories and vendors, search and filter expenses, and analyze spending through weekly, monthly and category-level dashboards.
+Users manage categories and subcategories, search and filter expenses, and analyze spending through weekly, monthly and category-level dashboards. Cloud sync requires login; each account’s Neon data is separate.
 
 The application works without internet using **SQLite**, while automatically synchronizing **records** with **NestJS on Render and Neon PostgreSQL** whenever connectivity is available.
 

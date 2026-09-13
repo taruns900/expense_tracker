@@ -1,3 +1,4 @@
+/** Later version — Business profile is not linked from More and is not synced. */
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet } from 'react-native';
 

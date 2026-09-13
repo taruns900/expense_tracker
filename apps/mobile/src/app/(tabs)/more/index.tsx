@@ -9,9 +9,7 @@ const ITEMS = [
   { href: '/expenses', label: 'Expenses', icon: 'list-outline' },
   { href: '/more/categories', label: 'Categories', icon: 'grid-outline' },
   { href: '/more/subcategories', label: 'Subcategories', icon: 'layers-outline' },
-  { href: '/more/vendors', label: 'Vendors', icon: 'storefront-outline' },
   { href: '/more/reports', label: 'Reports', icon: 'document-text-outline' },
-  { href: '/more/business-profile', label: 'Business profile', icon: 'business-outline' },
   { href: '/more/data-management', label: 'Data management', icon: 'cloud-outline' },
   { href: '/more/settings', label: 'Settings', icon: 'settings-outline' },
 ] as const;

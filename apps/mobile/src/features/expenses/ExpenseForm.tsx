@@ -8,9 +8,8 @@ import { colors, spacing, typography } from '@/components/theme';
 import { categoryService } from '@/features/categories';
 import { expenseService } from '@/features/expenses/expenseService';
 import { subCategoryService } from '@/features/subcategories';
-import { vendorService } from '@/features/vendors';
 import type { ExpenseInput, ExpenseListItem } from '@/types/expense';
-import type { CategoryRecord, SubCategoryRecord, VendorRecord } from '@/types/masterData';
+import type { CategoryRecord, SubCategoryRecord } from '@/types/masterData';
 import { toIsoDate } from '@/utils/dates';
 import { formatInr } from '@/utils/money';
 import { toUserMessage } from '@/utils/userError';
@@ -37,7 +36,6 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(
     initial?.paymentMethod ?? null,
   );
-  const [vendorId, setVendorId] = useState<string | null>(initial?.vendorId ?? null);
   const [gstRate, setGstRate] = useState<GstRate | null>(initial?.gstRate ?? null);
   const [gstAmount, setGstAmount] = useState(
     initial?.gstAmount !== null && initial?.gstAmount !== undefined ? String(initial.gstAmount) : '',
@@ -48,14 +46,10 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
 
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategoryRecord[]>([]);
-  const [vendors, setVendors] = useState<VendorRecord[]>([]);
-  const [open, setOpen] = useState<null | 'category' | 'sub' | 'pay' | 'vendor' | 'gst'>(
-    null,
-  );
+  const [open, setOpen] = useState<null | 'category' | 'sub' | 'pay' | 'gst'>(null);
 
   useEffect(() => {
     void categoryService.listActive().then(setCategories);
-    void vendorService.listActive().then(setVendors);
   }, []);
 
   useEffect(() => {
@@ -86,7 +80,7 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
       categoryId: categoryId ?? '',
       subCategoryId,
       paymentMethod: paymentMethod as PaymentMethod,
-      vendorId,
+      vendorId: null,
       description,
       billNumber,
       gstRate,
@@ -112,7 +106,6 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
   const categoryName = categories.find((item) => item.id === categoryId)?.name ?? initial?.categoryName;
   const subName =
     subcategories.find((item) => item.id === subCategoryId)?.name ?? initial?.subCategoryName;
-  const vendorName = vendors.find((item) => item.id === vendorId)?.name ?? initial?.vendorName;
 
   return (
     <View style={[styles.form, hideSubmit && styles.formEmbedded]}>
@@ -150,12 +143,14 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
         maximumDate={new Date()}
         onChange={setDate}
       />
+      {/* Later version — vendor picker
       <SelectField
         label="Vendor"
         value={vendorName}
         placeholder="Optional"
         onPress={() => setOpen('vendor')}
       />
+      */}
       <SelectField
         label="GST rate"
         value={gstRate === null ? undefined : `${gstRate}%`}
@@ -208,6 +203,7 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
         onClose={() => setOpen(null)}
         onSelect={(id) => setPaymentMethod(id as PaymentMethod)}
       />
+      {/* Later version — vendor picker
       <SelectModal
         visible={open === 'vendor'}
         title="Vendor"
@@ -216,6 +212,7 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
         onClose={() => setOpen(null)}
         onSelect={(id) => setVendorId(id || null)}
       />
+      */}
       <SelectModal
         visible={open === 'gst'}
         title="GST rate"

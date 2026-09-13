@@ -7,7 +7,7 @@
 | Version       | V1.0                                                        |
 | Status        | Implementation Plan                                         |
 | Product       | Offline-first, cloud-backed, mobile-only expense management |
-| Primary users | 1–2 business owners                                         |
+| Primary users | Individual owners (one cloud dataset per login; shared business later) |
 | Mobile        | React Native + Expo + TypeScript                            |
 | Backend       | NestJS + Prisma + REST                                      |
 | Cloud         | Render (NestJS) + Neon PostgreSQL; attachments in V2        |
@@ -28,7 +28,7 @@ Build a mobile expense app that:
 - Syncs automatically to **NestJS on Render → Neon PostgreSQL** when the network is available. Receipt attachments are **V2** (not V1).
 - Gives owners a dashboard for today / week / month / year, charts, and top categories. Full expense history is under More.
 - Exports **individual expense PDFs** and **filtered report PDFs** on device.
-- Stays simple enough for two owners with the same permissions, while leaving room for later billing modules, a web client, and optional AI insights on payment history.
+- Stays simple enough for one signed-in owner per cloud dataset, while leaving room for later shared-business access, billing modules, a web client, and optional AI insights on payment history.
 
 ---
 
@@ -40,11 +40,11 @@ Build a mobile expense app that:
 
 ### V1 outcomes
 
-- Fast expense entry with all expense fields on one add popup (optional fields left blank).
-- Categories, subcategories, and vendors as user-managed master data (not hard-coded).
-- Production API on **Render**; **Neon** PostgreSQL for cloud records.
-- Human-readable expense ID `DDMMYY-HHMMSS` plus internal UUID.
-- JWT auth; optional PIN / biometric app lock.
+- Fast expense entry with all expense fields on one add popup (optional fields left blank). **Vendor picker is deferred.**
+- Categories and subcategories as user-managed master data (not hard-coded). **Vendors deferred.**
+- Production API on **Render**; **Neon** PostgreSQL for cloud records **per `userId`**.
+- Human-readable expense ID `DDMMYY-HHMMSS` plus internal UUID (unique per user in the cloud).
+- JWT auth required for sync; optional PIN / biometric app lock.
 - No emojis in the UI; consistent icon set and design system.
 
 
@@ -108,7 +108,7 @@ The mobile app never talks to Neon directly.
 1. User action updates SQLite immediately; the UI re-renders from local data.
 2. A `sync_queue` row is written (`PENDING`).
 3. When online, the sync engine posts changes to NestJS.
-4. NestJS on Render validates and persists records to Neon PostgreSQL. No attachment files in V1.
+4. NestJS on Render validates and persists records to Neon PostgreSQL **under the JWT `sub` (`userId`)**. No attachment files in V1. Vendor and business-profile sync are deferred.
 5. Local rows move `PENDING → SYNCING → SYNCED` (or `FAILED` with automatic retry).
 
 ---
@@ -175,7 +175,7 @@ Feature modules: `auth`, `users`, `expenses`, `categories`, `subcategories`, `ve
 | ID                            | Role                                                                       |
 | ----------------------------- | -------------------------------------------------------------------------- |
 | `id` (UUID)                   | Primary key on all entities; sent on every sync to make retries idempotent |
-| `expenseId` (`DDMMYY-HHMMSS`) | User-visible; unique per business; shown on lists, details, PDFs           |
+| `expenseId` (`DDMMYY-HHMMSS`) | User-visible; unique **per user** in Neon; shown on lists, details, PDFs |
 
 
 Generate `expenseId` on the device at save time so offline records already have a display ID. Enforce uniqueness locally and on the server. If a collision occurs (two saves in the same second), append a short suffix or bump seconds and retry locally.
@@ -201,17 +201,17 @@ Generate `expenseId` on the device at save time so offline records already have 
 
 ### Related entities
 
-- **Category / subcategory:** user-managed; seed defaults (Office, Travel, Utilities, …); support edit and deactivate (do not hard-delete if expenses reference them).
-- **Vendor:** optional on expense; `vendorId` nullable.
+- **Category / subcategory:** user-managed; seed defaults (Office, Travel, Utilities, …); support edit and deactivate (do not hard-delete if expenses reference them). Cloud rows are keyed by **`(userId, id)`** so default seed UUIDs do not leak across accounts.
+- **Vendor:** optional on expense; `vendorId` nullable. **UI and sync are deferred**; tables stay in schema.
 - **ExpenseAttachment (V2):** metadata in SQLite (`fileName`, `fileType`, `fileSize`, `localFilePath`, `cloudObjectPath`, `syncStatus`). Table ships in V1 migrations but UI and services stay disabled until V2.
-- **Business profile:** name, address, phone, email, GST number, logo — used on PDFs.
+- **Business profile:** deferred (tables remain; not synced or linked in More).
 - **SyncQueue:** `entityType`, `entityId`, `operation`, `payload`, `retryCount`, `status`.
 
 
 
 ### Indexes (local and cloud)
 
-`expenses.expenseDate`, `categoryId`, `subCategoryId`, `vendorId`, `paymentMethod`, `createdAt`, `expenseId`, plus unique indexes on `id` and `expenseId`. Shipped SQLite/Prisma still include an unused `payment_status` column (default `Paid`) so existing databases are not rewritten; the app does not read, write, filter, or display it except inserting the column default on create.
+`expenses.expenseDate`, `categoryId`, `subCategoryId`, `vendorId`, `paymentMethod`, `createdAt`, `expenseId`, plus unique indexes on `id` and **`(userId, expenseId)`** in Neon. Shipped SQLite/Prisma still include an unused `payment_status` column (default `Paid`) so existing databases are not rewritten; the app does not read, write, filter, or display it except inserting the column default on create.
 
 ---
 
@@ -223,7 +223,9 @@ Generate `expenseId` on the device at save time so offline records already have 
 
 ### Queue operations
 
-`CREATE`, `UPDATE`, `DELETE` for expenses, categories, subcategories, vendors, and business profile. Attachment queue entries are **V2** only.
+`CREATE`, `UPDATE`, `DELETE` for expenses, categories, and subcategories. Vendor and business-profile queue entries are **deferred** (not pushed). Attachment queue entries are **V2** only.
+
+Push and pull are authorized with JWT. The server stamps **`userId` from the token** on every upsert and change-log row. Pull uses `GET /sync/changes?since=` filtered by that `userId`.
 
 ### Engine responsibilities
 
@@ -238,11 +240,11 @@ Generate `expenseId` on the device at save time so offline records already have 
 
 ### Duplicate prevention
 
-The client always sends the same UUID. The server upserts by `id`. Retries must not create a second row.
+The client always sends the same UUID. The server upserts by **`(userId, id)`** for categories/subcategories and by **`id` plus ownership check** for expenses. Retries must not create a second row. A UUID that belongs to another user is rejected.
 
 ### Conflicts (V1)
 
-Last-write-wins using `updatedAt` (and a server-received timestamp if clocks disagree). Two owners only; richer merge is out of scope.
+Last-write-wins using `updatedAt` (and a server-received timestamp if clocks disagree). One owner per cloud dataset in this slice; richer merge and shared-business are out of scope.
 
 ### Attachment handling (V2 — not V1)
 
@@ -259,15 +261,15 @@ REST over HTTPS. JWT on all non-auth routes. Validate with Zod/class-validator; 
 
 | Area          | Methods                                                                                          |
 | ------------- | ------------------------------------------------------------------------------------------------ |
-| Auth          | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`                                  |
+| Auth          | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me`                  |
 | Expenses      | `POST/GET /expenses`, `GET/PATCH/DELETE /expenses/:id`                                           |
 | Categories    | `POST/GET /categories`, `PATCH/DELETE /categories/:id`                                           |
 | Subcategories | `POST/GET /categories/:categoryId/subcategories`, `PATCH/DELETE /subcategories/:id`              |
-| Vendors       | `POST/GET /vendors`, `GET/PATCH/DELETE /vendors/:id`                                             |
+| Vendors       | Deferred. Tables remain; no sync apply.                                                          |
 | Dashboard     | `GET /dashboard/summary`, `/weekly`, `/monthly`, `/top-categories`                               |
-| Sync          | `POST /sync`, `GET /sync/changes`                                                                |
+| Sync          | `POST /sync`, `GET /sync/changes` (both **user-scoped**)                                         |
 | Attachments   | None in V1. V2: local device files; later signed URLs if cloud files are added.                  |
-| Profile       | `GET/PATCH /business-profile`                                                                    |
+| Profile       | Deferred. `GET/PATCH /business-profile` not used in this slice.                                  |
 
 
 Dashboard endpoints are for a future web client and for debugging. **The mobile dashboard must compute from SQLite** so it works offline.
@@ -343,7 +345,7 @@ Build in this order so the app is usable locally before cloud complexity lands. 
 
 - Render web service; Neon project and Postgres database.
 - NestJS + Prisma schema mirroring local entities (PostgreSQL in production).
-- JWT register/login/refresh; protect routes.
+- JWT register/login/refresh/`GET /auth/me`; protect routes; stamp `userId` on synced entities.
 - Health check and environment-based config (no secrets in the mobile app).
 - Deploy Render; HTTPS only.
 
@@ -386,7 +388,7 @@ Build in this order so the app is usable locally before cloud complexity lands. 
 - Last-write-wins on `updatedAt`.
 - Data Management screen: sync status (read-only for V1 automation).
 
-**Exit:** Create/edit/delete offline; after network returns, Neon matches the device’s **records**; second login on another device receives expense/master data, not receipt files. No duplicates after forced retries.
+**Exit:** Create/edit/delete offline; after network returns, Neon matches **that user’s** records; a second device signed into the **same** account receives expense/master data, not receipt files. A different account never receives those rows. No duplicates after forced retries.
 
 ### Phase 6 — Attachments (**deferred to V2**)
 
@@ -409,7 +411,7 @@ Not part of the V1 MVP. Implementation order and exit criteria live in **section
 
 **Goal:** Local PDF generation and share.
 
-- Individual expense PDF: business profile + all expense fields (attachment names when V2 is enabled).
+- Individual expense PDF: expense fields (business profile deferred; attachment names when V2 is enabled).
 - Filtered report PDF: period, totals, count, table of ID / date / category / amount; respects current filters.
 - Write to local files; share via the OS.
 
@@ -426,7 +428,8 @@ Not part of the V1 MVP. Implementation order and exit criteria live in **section
 
 ### Phase 10 — Security and data safety
 
-- Production JWT flow; token storage in secure storage.
+- Production JWT flow; token storage in secure storage; **user-scoped sync**.
+- Logout clears on-device financial data; re-login pulls that account from Neon.
 - Optional PIN / biometric lock.
 - Validate all API input (no cloud file URLs in V1).
 - Manual export (and backup/restore if time allows; export is the V1 must).
@@ -444,7 +447,7 @@ Not part of the V1 MVP. Implementation order and exit criteria live in **section
 | Area            | Rule                                                                                                |
 | --------------- | --------------------------------------------------------------------------------------------------- |
 | GST             | Optional rate 0 / 5 / 12 / 18 / 28; compute amount; no filing                                       |
-| Soft deactivate | Categories/vendors used by expenses stay resolvable in history                                      |
+| Soft deactivate | Categories used by expenses stay resolvable in history (vendors when that feature returns)          |
 | Deletes         | Tombestone or queue `DELETE` so sync removes cloud rows                                             |
 | Currency        | INR display (`₹`) in V1                                                                             |
 | Extensibility   | Feature modules stay isolated so Customers / Invoices / optional AI insights can be added later without rewriting expenses |
@@ -465,7 +468,7 @@ Not part of the V1 MVP. Implementation order and exit criteria live in **section
 | Sync       | Retry idempotency, queue ordering, conflict winner                    |
 | API        | Authz, validation, unique constraints                                 |
 | Device     | Airplane mode: create, search, dashboard, PDF, then sync on reconnect |
-| Regression | Two-user same-business data; attachment upload failure/retry          |
+| Regression | Two accounts isolated on Neon; same account on two devices; attachment upload failure/retry (V2) |
 
 
 Automate API and sync tests first; run critical mobile flows on a simulator each phase.
@@ -482,7 +485,7 @@ After every code change, confirm `npm run typecheck` passes and that a running E
 - [ ] No database keys in the app
 - [ ] Authenticated APIs
 - [ ] Server-side validation of amounts, FKs, file types/sizes (local attachments)
-- [ ] Users only see their business’s data
+- [ ] Users only see their own account’s data
 - [ ] Secure token storage; optional PIN/biometrics
 
 ---
@@ -534,14 +537,14 @@ The V1 MVP is complete when all **47** PRD V1 checklist items pass (items 40–4
 
 1. **Expense** — offline create/edit/delete/detail; required and optional fields; search + filters.
 2. **Dashboard** — period totals, month-over-month, top 5 categories, weekly/monthly charts.
-3. **Management** — create/edit/deactivate categories, subcategories, vendors.
-4. **Documents** — individual + filtered PDF export, offline (no receipt attachments in V1).
-5. **Cloud** — sync expenses, categories, vendors to **Render → Neon**; retry; no duplicates.
+3. **Management** — create/edit/deactivate categories and subcategories (vendors later).
+4. **Documents** — individual + filtered PDF export, offline (no receipt attachments in V1; no business-profile block until that feature returns).
+5. **Cloud** — JWT login; sync expenses, categories, subcategories to **Render → Neon** **per user**; retry; no duplicates; no cross-account reads.
 6. **Offline** — core app + dashboard from SQLite; pending **record** work uploads when connectivity returns.
 
 Final product definition (from the PRD):
 
-> An offline-first, cloud-backed, mobile-only business expense management application for one or two business owners.
+> An offline-first, cloud-backed, mobile-only business expense management application with **per-login** cloud data isolation.
 
 ---
 

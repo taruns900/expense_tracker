@@ -2,7 +2,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-import { businessProfileService } from '@/features/businessProfile/businessProfileService';
 import { expenseService } from '@/features/expenses/expenseService';
 import type { ExpenseFilters } from '@/types/filters';
 import { formatDisplayDate } from '@/utils/dates';
@@ -70,21 +69,14 @@ export const pdfService = {
     if (!expense) {
       throw new UserFacingError("That expense couldn't be found.");
     }
-    const profile = await businessProfileService.get();
     const html = documentHtml(`
       <h1>Expense</h1>
-      ${row('Business', profile?.businessName)}
-      ${row('Address', profile?.address)}
-      ${row('Phone', profile?.phone)}
-      ${row('Email', profile?.email)}
-      ${row('GST number', profile?.gstNumber)}
       <hr />
       ${row('Expense ID', expense.expenseId)}
       ${row('Date', formatDisplayDate(expense.expenseDate))}
       ${row('Amount', formatInr(expense.amount))}
       ${row('Category', expense.categoryName)}
       ${row('Subcategory', expense.subCategoryName)}
-      ${row('Vendor', expense.vendorName)}
       ${row('Payment method', expense.paymentMethod)}
       ${row('GST', expense.gstRate !== null ? `${expense.gstRate}% · ${formatInr(expense.gstAmount ?? 0)}` : null)}
       ${row('Description', expense.description)}
@@ -96,7 +88,6 @@ export const pdfService = {
   async shareReport(filters: ExpenseFilters, search?: string): Promise<void> {
     const expenses = await expenseService.list(filters, search);
     const total = expenses.reduce((sum, item) => sum + item.amount, 0);
-    const profile = await businessProfileService.get();
     const period = [filters.dateFrom, filters.dateTo].filter(Boolean).join(' to ') || 'All dates';
     const rows = expenses
       .map(
@@ -112,7 +103,6 @@ export const pdfService = {
 
     const html = documentHtml(`
       <h1>Expense report</h1>
-      ${row('Business', profile?.businessName)}
       ${row('Period', period)}
       ${row('Total expenses', formatInr(total))}
       ${row('Number of expenses', String(expenses.length))}

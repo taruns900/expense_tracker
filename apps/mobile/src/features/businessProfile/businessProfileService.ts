@@ -1,5 +1,5 @@
 import { getDatabase, isDatabaseAvailable } from '@/database';
-import { businessProfileRepository, enqueueSync } from '@/database/repositories';
+import { businessProfileRepository } from '@/database/repositories';
 import type { BusinessProfileRecord } from '@/database/repositories/businessProfileRepository';
 import { nowIso } from '@/utils/text';
 import { UserFacingError } from '@/utils/userError';
@@ -40,12 +40,13 @@ export const businessProfileService = {
     };
     await getDatabase().withTransactionAsync(async () => {
       await businessProfileRepository.upsert(record);
-      await enqueueSync({
-        entityType: 'business_profile',
-        entityId: record.id,
-        operation: existing ? 'UPDATE' : 'CREATE',
-        payload: record,
-      });
+      // Later version — business profile cloud sync
+      // await enqueueSync({
+      //   entityType: 'business_profile',
+      //   entityId: record.id,
+      //   operation: existing ? 'UPDATE' : 'CREATE',
+      //   payload: record,
+      // });
     });
   },
 };

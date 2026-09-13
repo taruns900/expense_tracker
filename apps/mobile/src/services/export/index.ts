@@ -1,6 +1,5 @@
 import { expenseRepository } from '@/database/repositories';
 import { categoryRepository } from '@/database/repositories';
-import { vendorRepository } from '@/database/repositories';
 import { isDatabaseAvailable } from '@/database';
 import { UserFacingError } from '@/utils/userError';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -11,12 +10,11 @@ export const exportService = {
     if (!isDatabaseAvailable()) {
       throw new UserFacingError('Export is available on iOS and Android.');
     }
-    const [expenses, categories, vendors] = await Promise.all([
+    const [expenses, categories] = await Promise.all([
       expenseRepository.list(),
       categoryRepository.list(),
-      vendorRepository.list(),
     ]);
-    const payload = JSON.stringify({ expenses, categories, vendors, exportedAt: new Date().toISOString() }, null, 2);
+    const payload = JSON.stringify({ expenses, categories, exportedAt: new Date().toISOString() }, null, 2);
     const root = FileSystem.cacheDirectory;
     if (!root) {
       throw new UserFacingError("Couldn't create the export file.");

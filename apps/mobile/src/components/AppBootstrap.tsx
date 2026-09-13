@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing, typography } from '@/components/theme';
 import { getSchemaVersion, initializeDatabase } from '@/database';
+import { authService } from '@/services/auth';
 import { syncEngine } from '@/services/sync';
 import { useSessionStore } from '@/store';
 
@@ -23,11 +24,13 @@ export function AppBootstrap({ children }: Props) {
     }, 20000);
 
     initializeDatabase()
-      .then(() => {
-        if (!cancelled) {
-          markDatabaseReady(getSchemaVersion());
-          void syncEngine.run();
+      .then(async () => {
+        if (cancelled) {
+          return;
         }
+        await authService.hydrate();
+        markDatabaseReady(getSchemaVersion());
+        void syncEngine.run();
       })
       .catch(() => {
         if (!cancelled) {
