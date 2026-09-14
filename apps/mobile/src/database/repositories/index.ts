@@ -4,7 +4,9 @@ export { categoryRepository } from './categoryRepository';
 export { expenseRepository } from './expenseRepository';
 export { subCategoryRepository } from './subCategoryRepository';
 export {
+  enqueueMissingLocalChanges,
   enqueueSync,
+  markEntitySynced,
   resetStuckSyncingItems,
   listDrainable,
   listSyncQueue,

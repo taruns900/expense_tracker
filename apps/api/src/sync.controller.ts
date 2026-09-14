@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Get,
   Inject,
+  Logger,
   Post,
   Query,
   Req,
@@ -26,29 +27,45 @@ const SYNCABLE = new Set(['category', 'subcategory', 'expense']);
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class SyncController {
+  private readonly logger = new Logger(SyncController.name);
+
   constructor(@Inject(PrismaService) private readonly prismaService: PrismaService) {}
 
   @Post('/sync')
   async push(@Req() request: AuthenticatedRequest, @Body() body: { changes?: SyncChange[] }) {
     const userId = requireUserId(request);
     const changes = body.changes ?? [];
+    const failed: Array<{ entityId: string; entityType: string }> = [];
+    let accepted = 0;
+
     for (const change of changes) {
       if (!SYNCABLE.has(change.entityType)) {
         continue;
       }
-      await this.apply(userId, change);
-      await this.prismaService.changeLog.create({
-        data: {
-          userId,
-          entityType: change.entityType,
-          entityId: change.entityId,
-          operation: change.operation,
-          payload: JSON.stringify(change.data ?? {}),
-          updatedAt: new Date(change.updatedAt || Date.now()),
-        },
-      });
+      try {
+        await this.apply(userId, change);
+        await this.prismaService.changeLog.create({
+          data: {
+            userId,
+            entityType: change.entityType,
+            entityId: change.entityId,
+            operation: change.operation,
+            payload: JSON.stringify(change.data ?? {}),
+            updatedAt: this.toDate(change.updatedAt),
+          },
+        });
+        accepted += 1;
+      } catch (error) {
+        this.logger.warn(
+          `Sync apply failed for ${change.entityType} ${change.entityId}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+        failed.push({ entityId: change.entityId, entityType: change.entityType });
+      }
     }
-    return { accepted: changes.filter((change) => SYNCABLE.has(change.entityType)).length };
+
+    return { accepted, failed };
   }
 
   @Get('/sync/changes')
@@ -98,11 +115,38 @@ export class SyncController {
   }
   */
 
+  private toDate(value: unknown, fallback?: Date): Date {
+    const fallbackDate =
+      fallback && !Number.isNaN(fallback.getTime()) ? fallback : new Date();
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? fallbackDate : parsed;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const trimmed = value.trim();
+      if (/^\d{10}$/.test(trimmed) || /^\d{13}$/.test(trimmed)) {
+        const ms = trimmed.length === 10 ? Number(trimmed) * 1000 : Number(trimmed);
+        const parsed = new Date(ms);
+        if (!Number.isNaN(parsed.getTime())) {
+          return parsed;
+        }
+      }
+      const parsed = new Date(trimmed);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+    return fallbackDate;
+  }
+
   private async apply(userId: string, change: SyncChange) {
     const data = change.data ?? {};
     const id = String(data.id ?? change.entityId);
-    const updatedAt = new Date(String(data.updatedAt ?? change.updatedAt ?? Date.now()));
-    const createdAt = new Date(String(data.createdAt ?? Date.now()));
+    const updatedAt = this.toDate(data.updatedAt, this.toDate(change.updatedAt));
+    const createdAt = this.toDate(data.createdAt, updatedAt);
 
     if (change.entityType === 'category') {
       if (change.operation === 'DELETE') {

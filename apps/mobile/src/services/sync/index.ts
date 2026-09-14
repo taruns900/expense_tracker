@@ -3,8 +3,10 @@ import * as Network from 'expo-network';
 import { APP_META_KEYS, getAppMeta, getDatabase, isDatabaseAvailable, setAppMeta } from '@/database';
 import {
   categoryRepository,
+  enqueueMissingLocalChanges,
   expenseRepository,
   listDrainable,
+  markEntitySynced,
   queueCounts,
   resetStuckSyncingItems,
   subCategoryRepository,
@@ -111,6 +113,7 @@ export const syncEngine = {
     }
 
     await resetStuckSyncingItems();
+    await enqueueMissingLocalChanges();
 
     const online = await this.isOnline();
     const hasToken = Boolean(await getAccessToken());
@@ -139,11 +142,15 @@ export const syncEngine = {
         await updateQueueStatus(item.id, 'SYNCING');
       }
 
+      let result: {
+        accepted?: number;
+        failed?: Array<{ entityId: string; entityType: string }>;
+      };
       try {
-        await apiRequest('/sync', { method: 'POST', body: { changes } });
-        for (const item of items) {
-          await updateQueueStatus(item.id, 'SYNCED');
-        }
+        result = await apiRequest<{
+          accepted?: number;
+          failed?: Array<{ entityId: string; entityType: string }>;
+        }>('/sync', { method: 'POST', body: { changes } });
       } catch (error) {
         for (const item of items) {
           await updateQueueStatus(item.id, 'FAILED', item.retryCount + 1);
@@ -153,6 +160,22 @@ export const syncEngine = {
             ? error
             : new UserFacingError(SYNC_FAILURE_MESSAGE);
         }
+        return;
+      }
+
+      const failedKeys = new Set(
+        (result.failed ?? []).map((item) => `${item.entityType}:${item.entityId}`),
+      );
+      for (const item of items) {
+        if (failedKeys.has(`${item.entityType}:${item.entityId}`)) {
+          await updateQueueStatus(item.id, 'FAILED', item.retryCount + 1);
+          continue;
+        }
+        await updateQueueStatus(item.id, 'SYNCED');
+        await markEntitySynced(item.entityType, item.entityId);
+      }
+      if (failedKeys.size > 0 && options?.manual) {
+        throw new UserFacingError(SYNC_FAILURE_MESSAGE);
       }
     }
 

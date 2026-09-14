@@ -42,6 +42,8 @@ export async function seedMasterData(): Promise<void> {
             name: category.name,
             isActive: true,
             sortOrder: category.sortOrder,
+            createdAt: timestamp,
+            updatedAt: timestamp,
           },
         });
       }
@@ -69,6 +71,8 @@ export async function seedMasterData(): Promise<void> {
               name: subcategory.name,
               isActive: true,
               sortOrder: index + 1,
+              createdAt: timestamp,
+              updatedAt: timestamp,
             },
           });
         }
