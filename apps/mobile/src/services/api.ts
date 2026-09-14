@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 import { config } from '@/config/env';
+import { isJwtExpired } from '@/utils/jwt';
 import { UserFacingError } from '@/utils/userError';
 
 const ACCESS_KEY = 'et.accessToken';
@@ -59,10 +60,23 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+export async function restoreAccessToken(): Promise<string | null> {
+  const existing = await getAccessToken();
+  if (existing && !isJwtExpired(existing)) {
+    return existing;
+  }
+  const refreshed = await refreshAccessToken();
+  if (!refreshed) {
+    await clearTokens();
+    return null;
+  }
+  return getAccessToken();
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (options.auth !== false) {
-    const token = await getAccessToken();
+    const token = await restoreAccessToken();
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -76,7 +90,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
   } catch {
-    throw new UserFacingError('Some changes couldn’t be synced. We’ll try again automatically.');
+    throw new UserFacingError(
+      options.auth === false
+        ? "Couldn't reach the server. Check your connection."
+        : 'Some changes couldn’t be synced. We’ll try again automatically.',
+    );
   }
 
   if (response.status === 401 && options.auth !== false && !options.retried) {
@@ -84,7 +102,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     if (refreshed) {
       return apiRequest<T>(path, { ...options, retried: true });
     }
-    throw new UserFacingError('Sign in again under Settings to sync with the cloud.');
+    await clearTokens();
+    throw new UserFacingError('Sign in again to sync with the cloud.');
   }
 
   if (!response.ok) {

@@ -27,7 +27,7 @@ The application allows users to:
 - Optionally associate vendors
 - Record payment information
 - Record GST information
-- Sign in so cloud data stays isolated per account
+- Sign in with phone and password on launch so cloud data stays isolated per account
 - Attach photos and PDF bills/receipts (**V2**)
 - Search and filter expenses
 - View expense history
@@ -38,7 +38,7 @@ The application is **offline-first**.
 
 This means the application must remain fully usable when there is no internet connection. Data is first written to the local SQLite database and synchronized with the cloud when internet connectivity is available.
 
-Unlike a purely offline application, the V1 MVP syncs **structured data** (expenses, categories, subcategories) to **Neon PostgreSQL** via **NestJS on Render**, **scoped to the signed-in user**. **Vendors and business profile are deferred** to a later version (schema and screens stay in the repo, unlinked). Receipt attachments are **not in V1**; they are planned for **V2** (on-device files, no cloud upload in the first V2 slice).
+Unlike a purely offline application, the V1 MVP requires **sign-in on launch** (phone + password). After that, the app works offline from SQLite. It syncs **structured data** (expenses, categories, subcategories) to **Neon PostgreSQL** via **NestJS on Render**, **scoped to the signed-in user**. **Vendors and business profile are deferred** to a later version (schema and screens stay in the repo, unlinked). Receipt attachments are **not in V1**; they are planned for **V2** (on-device files, no cloud upload in the first V2 slice).
 
 ---
 
@@ -68,7 +68,7 @@ The experience should feel simple and lightweight rather than like a complicated
 
 ## 3.1 Offline first
 
-The user should never be blocked from recording or viewing expenses because of poor connectivity.
+After sign-in, the user should never be blocked from recording or viewing expenses because of poor connectivity. First launch and expired sessions need the network to log in or register.
 
 ## 3.2 Local-first interaction
 
@@ -1356,27 +1356,32 @@ Manual data export is still recommended as an additional safety mechanism.
 
 # 48. Security
 
-Since the application contains financial information, **JWT authentication** is required for cloud sync.
+Since the application contains financial information, **JWT authentication** is required. Each Neon dataset belongs to one login (`userId`). Passwords are stored only as **bcrypt hashes**. The server never stores or returns the original password. Forgotten passwords are replaced (new hash), not recovered from the hash.
 
-Recommended:
+Launch:
 
 ```text
-Use app offline (SQLite)
+Open app
    ↓
-Register or log in (Settings)
-   ↓
-Sync only that account’s rows on Neon
+Valid refresh token (up to 30 days)?
+   ├── No → Login (phone + password) or Sign up
+   └── Yes → Device lock (Face ID / fingerprint / phone PIN, whatever the OS offers)
+         ↓
+       Home (SQLite; sync that account only to Neon)
 ```
+
+Sign up fields: **name**, **phone** (login id), **password**, **recovery email** (for a later reset flow or operator support; not used as login). Login fields: **phone** and **password**. Login and sign-up are **not** on Settings.
 
 Rules:
 
-- The app stays usable **offline without an account**. Cloud push/pull requires sign-in.
+- The app does **not** work as a guest. Sign-in is required before Home.
+- After sign-in, core recording and dashboard stay **offline** until the refresh token expires (30 days). Then the user must go online to log in again.
 - Neon rows for expenses, categories, subcategories, and the change log carry **`userId` from the JWT**. The client cannot choose another user’s id.
 - `GET /sync/changes` returns only the signed-in user’s changes. Users never see another account’s data.
 - Logging out **clears data on this device** (cloud data stays on the account). Signing back in **pulls that account** from the cloud. Signing in as a **different** account also replaces local data.
-- Tokens are stored in secure storage. Optional PIN / biometric app lock is device protection only; it does not separate Neon tenants.
+- Access and refresh tokens are stored in secure storage. Refresh tokens last **30 days**. Returning to the app while still signed in requires the **phone’s** biometric or device PIN (not a separate in-app PIN). That lock does not separate Neon tenants.
 
-No complicated RBAC system is required. Shared-business access is out of this slice.
+No complicated RBAC system is required. Shared-business access is out of this slice. Email/SMS OTP is not required in this slice; an operator with database access may replace `passwordHash` with a new bcrypt hash.
 
 ---
 
@@ -1806,6 +1811,8 @@ where appropriate.
 ```text
 Open App
     ↓
+Login or Sign up (or device unlock if already signed in)
+    ↓
 Dashboard
     ↓
 Tap Add
@@ -2128,7 +2135,7 @@ The MVP is complete when the user can:
 43. Synchronize expenses with the backend (Render → Neon), **scoped to the signed-in user**.
 44. Synchronize categories (and subcategories).
 45. Synchronize vendors. (**later version**)
-45a. Register / log in; cloud data is isolated per account.
+45a. Register (name, phone, password, recovery email) or log in with phone + password on launch; cloud data is isolated per account; refresh session lasts 30 days; device biometrics/PIN unlock while signed in.
 46. Retry failed synchronization.
 47. Prevent duplicate records.
 
@@ -2307,7 +2314,7 @@ Post-V1 (optional, not scheduled):
 
 The application provides fast expense entry with **date, category, amount, and payment method as mandatory fields**, while keeping subcategory, GST, description (maximum 200 characters), and bill number optional. Vendor and business profile are **deferred**. Expense date cannot be in the future. There is no notes field on expenses. **Receipt attachments are V2.**
 
-Users manage categories and subcategories, search and filter expenses, and analyze spending through weekly, monthly and category-level dashboards. Cloud sync requires login; each account’s Neon data is separate.
+Users manage categories and subcategories, search and filter expenses, and analyze spending through weekly, monthly and category-level dashboards. The app opens on login; each account’s Neon data is separate.
 
 The application works without internet using **SQLite**, while automatically synchronizing **records** with **NestJS on Render and Neon PostgreSQL** whenever connectivity is available.
 

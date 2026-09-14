@@ -64,6 +64,6 @@ API typecheck: `npm --prefix apps/api run typecheck`.
 - Bottom tabs: **Home**, **Add**, **More**
 - Home: totals, month comparison, top 5 categories, weekly/monthly history; history icon opens the expense list
 - Add: tapping the center tab opens a tall centered fade-in popup with all expense fields; after save a Successful confirmation lists entered details and Done returns to Home.
-- More: expenses (search, filters, PDF export), categories, subcategories, reports, data, settings (login)
+- More: expenses (search, filters, PDF export), categories, subcategories, reports, data, settings (account / log out)
 
 The UI is offline-first: screens read and write SQLite first; sync runs in the background.

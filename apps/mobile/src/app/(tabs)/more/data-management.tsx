@@ -11,8 +11,8 @@ import { useSessionStore } from '@/store';
 import { toUserMessage } from '@/utils/userError';
 
 export default function DataManagementScreen() {
-  const cloudEmail = useSessionStore((state) => state.cloudEmail);
-  const cloudUserId = useSessionStore((state) => state.cloudUserId);
+  const cloudName = useSessionStore((state) => state.cloudName);
+  const cloudPhone = useSessionStore((state) => state.cloudPhone);
   const [counts, setCounts] = useState({ pending: 0, failed: 0, synced: 0 });
   const [online, setOnline] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -32,7 +32,7 @@ export default function DataManagementScreen() {
     <View style={styles.wrap}>
       <Text style={styles.title}>Sync status</Text>
       <Text style={styles.body}>
-        Account: {cloudUserId ? cloudEmail || 'Signed in' : 'Not signed in (local only)'}
+        Account: {cloudName || cloudPhone || 'Signed in'}
       </Text>
       <Text style={styles.body}>Cloud mode: {config.cloudMode}</Text>
       <Text style={styles.body}>API: {config.apiBaseUrl}</Text>

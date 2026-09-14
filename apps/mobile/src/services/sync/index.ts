@@ -66,7 +66,7 @@ function assertManualSyncReady(online: boolean, hasToken: boolean, options?: Syn
     throw new UserFacingError('Connect to the internet to sync.');
   }
   if (!hasToken) {
-    throw new UserFacingError('Sign in under Settings to sync with the cloud.');
+    throw new UserFacingError('Sign in to sync with the cloud.');
   }
 }
 

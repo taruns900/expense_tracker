@@ -8,15 +8,17 @@ datasource db {
 }
 
 model User {
-  id            String        @id @default(uuid())
-  email         String        @unique
-  passwordHash  String
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  categories    Category[]
-  subCategories SubCategory[]
-  expenses      Expense[]
-  changeLogs    ChangeLog[]
+  id             String        @id @default(uuid())
+  phone          String        @unique
+  name           String
+  recoveryEmail  String        @unique
+  passwordHash   String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  categories     Category[]
+  subCategories  SubCategory[]
+  expenses       Expense[]
+  changeLogs     ChangeLog[]
 }
 
 model Category {

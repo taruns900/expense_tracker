@@ -1,105 +1,102 @@
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as SecureStore from 'expo-secure-store';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { AppState, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Input } from '@/components';
+import { Button } from '@/components';
 import { colors, spacing, typography } from '@/components/theme';
+import { useSessionStore } from '@/store';
 
-const PIN_KEY = 'et.pin';
-
-async function canUseBiometrics(): Promise<boolean> {
+async function deviceCanUnlock(): Promise<boolean> {
   try {
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-    return hasHardware && isEnrolled;
+    const level = await LocalAuthentication.getEnrolledLevelAsync();
+    return level !== LocalAuthentication.SecurityLevel.NONE;
   } catch {
     return false;
   }
 }
 
-async function authenticateWithBiometrics(): Promise<boolean> {
+async function authenticateWithDevice(): Promise<boolean> {
   const result = await LocalAuthentication.authenticateAsync({
     promptMessage: 'Unlock Expense Tracker',
-    cancelLabel: 'Use PIN',
+    fallbackLabel: 'Use device PIN',
+    disableDeviceFallback: false,
+    cancelLabel: 'Cancel',
   });
   return result.success;
 }
 
 export function AppLock({ children }: { children: ReactNode }) {
-  const [locked, setLocked] = useState(false);
-  const [pin, setPin] = useState('');
-  const [ready, setReady] = useState(false);
-  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const signedIn = Boolean(useSessionStore((state) => state.cloudUserId));
+  const insets = useSafeAreaInsets();
+  const [unlocked, setUnlocked] = useState(!signedIn);
+  const [deviceLockAvailable, setDeviceLockAvailable] = useState(true);
+  const [prompting, setPrompting] = useState(false);
+  const promptingRef = useRef(false);
 
-  useEffect(() => {
-    void SecureStore.getItemAsync(PIN_KEY)
-      .then((value) => {
-        setLocked(Boolean(value));
-        setReady(true);
-      })
-      .catch(() => setReady(true));
+  const lock = useCallback(() => {
+    setUnlocked(false);
   }, []);
 
-  const unlock = useCallback(() => {
-    setLocked(false);
-    setPin('');
-  }, []);
-
-  useEffect(() => {
-    if (!ready || !locked) {
+  const tryUnlock = useCallback(async () => {
+    if (promptingRef.current) {
       return;
     }
-    void canUseBiometrics().then(setBiometricsAvailable);
-  }, [ready, locked]);
-
-  useEffect(() => {
-    if (!ready || !locked || !biometricsAvailable) {
-      return;
-    }
-    void authenticateWithBiometrics().then((success) => {
+    promptingRef.current = true;
+    setPrompting(true);
+    try {
+      const available = await deviceCanUnlock();
+      setDeviceLockAvailable(available);
+      if (!available) {
+        return;
+      }
+      const success = await authenticateWithDevice();
       if (success) {
-        unlock();
+        setUnlocked(true);
+      }
+    } finally {
+      promptingRef.current = false;
+      setPrompting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!signedIn) {
+      setUnlocked(true);
+      return;
+    }
+    setUnlocked(false);
+  }, [signedIn]);
+
+  useEffect(() => {
+    if (!signedIn || unlocked) {
+      return;
+    }
+    void tryUnlock();
+  }, [signedIn, unlocked, tryUnlock]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background' && signedIn) {
+        lock();
       }
     });
-  }, [ready, locked, biometricsAvailable, unlock]);
+    return () => sub.remove();
+  }, [lock, signedIn]);
 
-  if (!ready) {
-    return children;
-  }
-
-  if (!locked) {
-    return children;
+  if (!signedIn || unlocked) {
+    return <>{children}</>;
   }
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]}>
       <Text style={styles.title}>Unlock</Text>
-      <Text style={styles.body}>Enter your PIN or use biometrics to open Expense Tracker.</Text>
-      {biometricsAvailable ? (
-        <Button
-          label="Unlock with biometrics"
-          onPress={() => {
-            void authenticateWithBiometrics().then((success) => {
-              if (success) {
-                unlock();
-              }
-            });
-          }}
-        />
-      ) : null}
-      <Input label="PIN" value={pin} onChangeText={setPin} keyboardType="number-pad" secureTextEntry />
-      <Button
-        label="Unlock with PIN"
-        variant={biometricsAvailable ? 'secondary' : 'primary'}
-        onPress={() => {
-          void SecureStore.getItemAsync(PIN_KEY).then((stored) => {
-            if (stored && stored === pin) {
-              unlock();
-            }
-          });
-        }}
-      />
+      <Text style={styles.body}>
+        {deviceLockAvailable
+          ? 'Use Face ID, fingerprint, or your phone PIN to open Expense Tracker.'
+          : 'Set a screen lock on this phone (PIN, pattern, fingerprint, or Face ID), then try again.'}
+      </Text>
+      <Button label={prompting ? 'Waiting' : 'Unlock'} disabled={prompting} onPress={() => void tryUnlock()} />
     </View>
   );
 }
@@ -108,7 +105,7 @@ const styles = StyleSheet.create({
   wrap: {
     flex: 1,
     justifyContent: 'center',
-    padding: spacing.xl,
+    paddingHorizontal: spacing.xl,
     backgroundColor: colors.background,
     gap: spacing.md,
   },

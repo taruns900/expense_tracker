@@ -10,7 +10,7 @@ import { SyncController } from './sync.controller';
   imports: [
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'dummy-jwt-secret-change-me',
-      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN ?? '7d') as `${number}d` },
+      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN ?? '1h') as '1h' },
     }),
   ],
   controllers: [AppController, SyncController],

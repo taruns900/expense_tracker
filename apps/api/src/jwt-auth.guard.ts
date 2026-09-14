@@ -9,7 +9,10 @@ import { JwtService } from '@nestjs/jwt';
 
 export type JwtPayload = {
   sub: string;
-  email: string;
+  phone?: string;
+  name?: string;
+  recoveryEmail?: string;
+  email?: string;
   typ?: string;
 };
 
@@ -38,7 +41,11 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Sign in required.');
     }
     try {
-      request.user = this.jwtService.verify<JwtPayload>(token);
+      const payload = this.jwtService.verify<JwtPayload>(token);
+      if (payload.typ === 'refresh') {
+        throw new UnauthorizedException('Sign in required.');
+      }
+      request.user = payload;
       return true;
     } catch {
       throw new UnauthorizedException('Sign in required.');
