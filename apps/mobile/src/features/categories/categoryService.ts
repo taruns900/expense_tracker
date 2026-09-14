@@ -3,6 +3,7 @@ import {
   categoryRepository,
   enqueueSync,
 } from '@/database/repositories';
+import { syncEngine } from '@/services/sync';
 import type { CategoryRecord } from '@/types/masterData';
 import { createId } from '@/utils/ids';
 import { normalizeName, nowIso } from '@/utils/text';
@@ -54,6 +55,7 @@ export const categoryService = {
       });
     });
 
+    syncEngine.request();
     return record;
   },
 
@@ -85,6 +87,7 @@ export const categoryService = {
         payload: updated,
       });
     });
+    syncEngine.request();
   },
 
   async setActive(id: string, isActive: boolean): Promise<void> {
@@ -113,5 +116,6 @@ export const categoryService = {
         payload: updated,
       });
     });
+    syncEngine.request();
   },
 };

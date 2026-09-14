@@ -8,6 +8,7 @@ import {
   expenseRepository,
   subCategoryRepository,
 } from '@/database/repositories';
+import { syncEngine } from '@/services/sync';
 import type { ExpenseInput, ExpenseListItem, LocalExpense } from '@/types/expense';
 import type { ExpenseFilters } from '@/types/filters';
 import { toIsoDate } from '@/utils/dates';
@@ -136,6 +137,7 @@ export const expenseService = {
     if (!saved) {
       throw new UserFacingError("The expense couldn't be saved.");
     }
+    syncEngine.request();
     return saved;
   },
 
@@ -162,6 +164,7 @@ export const expenseService = {
     if (!saved) {
       throw new UserFacingError("The expense couldn't be updated.");
     }
+    syncEngine.request();
     return saved;
   },
 
@@ -181,5 +184,6 @@ export const expenseService = {
         payload: { id, updatedAt: timestamp },
       });
     });
+    syncEngine.request();
   },
 };

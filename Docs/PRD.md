@@ -900,6 +900,8 @@ The user should not need to manually manage synchronization in normal usage.
 The sync engine should:
 
 - Detect connectivity
+- After each local create, update, or delete, attempt to upload pending records
+- When connectivity returns, upload pending records without waiting for a timer
 - Identify pending records
 - Upload changes (records only; not receipt files)
 - Retry failed operations
@@ -1365,7 +1367,7 @@ Open app
    ↓
 Valid refresh token (up to 30 days)?
    ├── No → Login (phone + password) or Sign up
-   └── Yes → App PIN (if the user has set one in Settings)
+   └── Yes → App lock if an app PIN or enabled biometrics (Face / fingerprint) are on
          ↓
        Home (SQLite; sync that account only to Neon)
 ```
@@ -1379,7 +1381,7 @@ Rules:
 - Neon rows for expenses, categories, subcategories, and the change log carry **`userId` from the JWT**. The client cannot choose another user’s id.
 - `GET /sync/changes` returns only the signed-in user’s changes. Users never see another account’s data.
 - Logging out **clears data on this device** (cloud data stays on the account). Signing back in **pulls that account** from the cloud. Signing in as a **different** account also replaces local data.
-- Access and refresh tokens are stored in secure storage. Refresh tokens last **30 days**. An optional **in-app PIN** (create, update, or remove in Settings) locks the app on this device. The app must **not** require or prompt for a phone OS lock (Face ID / device PIN). The app PIN does not separate Neon tenants.
+- Access and refresh tokens are stored in secure storage. Refresh tokens last **30 days**. App lock is **separate from the phone’s lock screen**. The user may set an **in-app PIN** (create, update, or remove in Settings). If the phone has Face ID / face or a fingerprint enrolled, Settings also has **separate toggles** to unlock this app with Face or with fingerprint. Turning those on must **not** require setting a phone PIN, and biometric prompts must **not** fall back to the phone lock. The app PIN and biometric toggles do not separate Neon tenants.
 
 No complicated RBAC system is required. Shared-business access is out of this slice. Email/SMS OTP is not required in this slice; an operator with database access may replace `passwordHash` with a new bcrypt hash.
 
@@ -2135,7 +2137,7 @@ The MVP is complete when the user can:
 43. Synchronize expenses with the backend (Render → Neon), **scoped to the signed-in user**.
 44. Synchronize categories (and subcategories).
 45. Synchronize vendors. (**later version**)
-45a. Register (name, phone, password, recovery email) or log in with phone + password on launch; cloud data is isolated per account; refresh session lasts 30 days; optional in-app PIN from Settings (not a phone OS lock).
+45a. Register (name, phone, password, recovery email) or log in with phone + password on launch; cloud data is isolated per account; refresh session lasts 30 days; optional in-app PIN; optional Face / fingerprint unlock toggles in Settings when those are enrolled on the phone (never require a phone OS lock).
 46. Retry failed synchronization.
 47. Prevent duplicate records.
 
@@ -2230,7 +2232,7 @@ V1 MVP checklist: items **1–39** and **43–50** (48 items). Items **40–42**
 ## Phase 10: Security and Data Safety
 
 - Authentication
-- PIN/in-app lock (Settings; not a phone OS lock)
+- PIN/in-app lock and optional Face / fingerprint unlock (Settings; not a phone OS lock)
 - Secure storage
 - HTTPS + JWT
 - Data export

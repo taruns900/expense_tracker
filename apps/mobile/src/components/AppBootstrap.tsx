@@ -19,6 +19,7 @@ export function AppBootstrap({ children }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    const stopWatching = syncEngine.watchConnectivity();
     const timer = setInterval(() => {
       void syncEngine.run();
     }, 20000);
@@ -40,6 +41,7 @@ export function AppBootstrap({ children }: Props) {
 
     return () => {
       cancelled = true;
+      stopWatching();
       clearInterval(timer);
     };
   }, [markDatabaseError, markDatabaseReady]);

@@ -86,11 +86,104 @@ async function pullChanges(): Promise<void> {
   await setAppMeta(APP_META_KEYS.syncSince, result.cursor);
 }
 
+function isOnlineState(state: Network.NetworkState): boolean {
+  return Boolean(state.isConnected && state.isInternetReachable !== false);
+}
+
+let runChain: Promise<void> = Promise.resolve();
+let networkSubscription: { remove: () => void } | null = null;
+let lastOnline: boolean | null = null;
+
+async function runOnce(options?: SyncRunOptions): Promise<void> {
+  requireManualPreconditions(options);
+
+  if (!isDatabaseAvailable()) {
+    return;
+  }
+
+  await resetStuckSyncingItems();
+  await enqueueMissingLocalChanges();
+
+  const online = await syncEngine.isOnline();
+  const hasToken = Boolean(await getAccessToken());
+  if (!online || !hasToken) {
+    assertManualSyncReady(online, hasToken, options);
+    return;
+  }
+
+  const queued = await listDrainable();
+  const parked = queued.filter((item) => !CLOUD_ENTITY_TYPES.has(item.entityType));
+  for (const item of parked) {
+    await updateQueueStatus(item.id, 'SYNCED');
+  }
+
+  const items = queued.filter((item) => CLOUD_ENTITY_TYPES.has(item.entityType));
+  if (items.length > 0) {
+    const changes: SyncChange[] = items.map((item) => ({
+      entityType: item.entityType,
+      entityId: item.entityId,
+      operation: item.operation,
+      updatedAt: item.updatedAt,
+      data: parsePayload(item),
+    }));
+
+    for (const item of items) {
+      await updateQueueStatus(item.id, 'SYNCING');
+    }
+
+    let result: {
+      accepted?: number;
+      failed?: Array<{ entityId: string; entityType: string }>;
+    };
+    try {
+      result = await apiRequest<{
+        accepted?: number;
+        failed?: Array<{ entityId: string; entityType: string }>;
+      }>('/sync', { method: 'POST', body: { changes } });
+    } catch (error) {
+      for (const item of items) {
+        await updateQueueStatus(item.id, 'FAILED', item.retryCount + 1);
+      }
+      if (options?.manual) {
+        throw error instanceof UserFacingError
+          ? error
+          : new UserFacingError(SYNC_FAILURE_MESSAGE);
+      }
+      return;
+    }
+
+    const failedKeys = new Set(
+      (result.failed ?? []).map((item) => `${item.entityType}:${item.entityId}`),
+    );
+    for (const item of items) {
+      if (failedKeys.has(`${item.entityType}:${item.entityId}`)) {
+        await updateQueueStatus(item.id, 'FAILED', item.retryCount + 1);
+        continue;
+      }
+      await updateQueueStatus(item.id, 'SYNCED');
+      await markEntitySynced(item.entityType, item.entityId);
+    }
+    if (failedKeys.size > 0 && options?.manual) {
+      throw new UserFacingError(SYNC_FAILURE_MESSAGE);
+    }
+  }
+
+  try {
+    await pullChanges();
+  } catch (error) {
+    if (options?.manual) {
+      throw error instanceof UserFacingError
+        ? error
+        : new UserFacingError(SYNC_FAILURE_MESSAGE);
+    }
+  }
+}
+
 export const syncEngine = {
   async isOnline(): Promise<boolean> {
     try {
       const state = await Network.getNetworkStateAsync();
-      return Boolean(state.isConnected && state.isInternetReachable !== false);
+      return isOnlineState(state);
     } catch {
       return false;
     }
@@ -105,89 +198,50 @@ export const syncEngine = {
     await pullChanges();
   },
 
-  async run(options?: SyncRunOptions): Promise<void> {
-    requireManualPreconditions(options);
+  /** Fire-and-forget after a local write. Offline is a no-op until connectivity returns. */
+  request(): void {
+    void this.run();
+  },
 
-    if (!isDatabaseAvailable()) {
-      return;
-    }
-
-    await resetStuckSyncingItems();
-    await enqueueMissingLocalChanges();
-
-    const online = await this.isOnline();
-    const hasToken = Boolean(await getAccessToken());
-    if (!online || !hasToken) {
-      assertManualSyncReady(online, hasToken, options);
-      return;
-    }
-
-    const queued = await listDrainable();
-    const parked = queued.filter((item) => !CLOUD_ENTITY_TYPES.has(item.entityType));
-    for (const item of parked) {
-      await updateQueueStatus(item.id, 'SYNCED');
-    }
-
-    const items = queued.filter((item) => CLOUD_ENTITY_TYPES.has(item.entityType));
-    if (items.length > 0) {
-      const changes: SyncChange[] = items.map((item) => ({
-        entityType: item.entityType,
-        entityId: item.entityId,
-        operation: item.operation,
-        updatedAt: item.updatedAt,
-        data: parsePayload(item),
-      }));
-
-      for (const item of items) {
-        await updateQueueStatus(item.id, 'SYNCING');
-      }
-
-      let result: {
-        accepted?: number;
-        failed?: Array<{ entityId: string; entityType: string }>;
+  watchConnectivity(): () => void {
+    if (networkSubscription) {
+      return () => {
+        networkSubscription?.remove();
+        networkSubscription = null;
+        lastOnline = null;
       };
-      try {
-        result = await apiRequest<{
-          accepted?: number;
-          failed?: Array<{ entityId: string; entityType: string }>;
-        }>('/sync', { method: 'POST', body: { changes } });
-      } catch (error) {
-        for (const item of items) {
-          await updateQueueStatus(item.id, 'FAILED', item.retryCount + 1);
-        }
-        if (options?.manual) {
-          throw error instanceof UserFacingError
-            ? error
-            : new UserFacingError(SYNC_FAILURE_MESSAGE);
-        }
-        return;
-      }
-
-      const failedKeys = new Set(
-        (result.failed ?? []).map((item) => `${item.entityType}:${item.entityId}`),
-      );
-      for (const item of items) {
-        if (failedKeys.has(`${item.entityType}:${item.entityId}`)) {
-          await updateQueueStatus(item.id, 'FAILED', item.retryCount + 1);
-          continue;
-        }
-        await updateQueueStatus(item.id, 'SYNCED');
-        await markEntitySynced(item.entityType, item.entityId);
-      }
-      if (failedKeys.size > 0 && options?.manual) {
-        throw new UserFacingError(SYNC_FAILURE_MESSAGE);
-      }
     }
 
-    try {
-      await pullChanges();
-    } catch (error) {
-      if (options?.manual) {
-        throw error instanceof UserFacingError
-          ? error
-          : new UserFacingError(SYNC_FAILURE_MESSAGE);
+    void this.isOnline().then((online) => {
+      lastOnline = online;
+    });
+
+    networkSubscription = Network.addNetworkStateListener((state) => {
+      const online = isOnlineState(state);
+      const wasOffline = lastOnline === false;
+      lastOnline = online;
+      if (online && wasOffline) {
+        void this.run();
       }
-    }
+    });
+
+    return () => {
+      networkSubscription?.remove();
+      networkSubscription = null;
+      lastOnline = null;
+    };
+  },
+
+  async run(options?: SyncRunOptions): Promise<void> {
+    const next = runChain.then(
+      () => runOnce(options),
+      () => runOnce(options),
+    );
+    runChain = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
   },
 };
 

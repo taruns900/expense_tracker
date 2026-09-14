@@ -4,6 +4,7 @@ import {
   enqueueSync,
   subCategoryRepository,
 } from '@/database/repositories';
+import { syncEngine } from '@/services/sync';
 import type { SubCategoryRecord } from '@/types/masterData';
 import { createId } from '@/utils/ids';
 import { normalizeName, nowIso } from '@/utils/text';
@@ -61,6 +62,7 @@ export const subCategoryService = {
     if (!saved) {
       throw new UserFacingError("The subcategory couldn't be saved.");
     }
+    syncEngine.request();
     return saved;
   },
 
@@ -99,6 +101,7 @@ export const subCategoryService = {
         payload: updated,
       });
     });
+    syncEngine.request();
   },
 
   async setActive(id: string, isActive: boolean): Promise<void> {
@@ -134,5 +137,6 @@ export const subCategoryService = {
         payload: updated,
       });
     });
+    syncEngine.request();
   },
 };

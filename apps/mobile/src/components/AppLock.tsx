@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, AppState, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Input } from '@/components';
 import { colors, spacing, typography } from '@/components/theme';
+import {
+  authenticateBiometric,
+  enabledUnlockBiometrics,
+  type BiometricSettings,
+} from '@/services/appBiometrics';
 import {
   dismissPinPrompt,
   getAppPin,
@@ -18,18 +23,25 @@ export function AppLock({ children }: { children: ReactNode }) {
   const insets = useSafeAreaInsets();
   const [ready, setReady] = useState(false);
   const [hasPin, setHasPin] = useState(false);
+  const [biometrics, setBiometrics] = useState<BiometricSettings>({ face: false, fingerprint: false });
   const [needsCreate, setNeedsCreate] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const promptingRef = useRef(false);
+
+  const lockRequired = hasPin || biometrics.face || biometrics.fingerprint;
 
   const loadLockState = useCallback(async (lockIfConfigured: boolean) => {
     const stored = await getAppPin();
     const configured = Boolean(stored);
     const dismissed = await wasPinPromptDismissed();
+    const nextBiometrics = await enabledUnlockBiometrics();
     setHasPin(configured);
+    setBiometrics(nextBiometrics);
     setNeedsCreate(!configured && !dismissed);
-    if (configured && lockIfConfigured) {
+    const shouldLock = configured || nextBiometrics.face || nextBiometrics.fingerprint;
+    if (shouldLock && lockIfConfigured) {
       setUnlocked(false);
     } else if (!configured) {
       setUnlocked(dismissed);
@@ -37,10 +49,34 @@ export function AppLock({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
+  const unlock = useCallback(() => {
+    setUnlocked(true);
+    setPin('');
+  }, []);
+
+  const tryBiometric = useCallback(
+    async (kind: 'face' | 'fingerprint') => {
+      if (promptingRef.current) {
+        return;
+      }
+      promptingRef.current = true;
+      try {
+        const success = await authenticateBiometric(kind);
+        if (success) {
+          unlock();
+        }
+      } finally {
+        promptingRef.current = false;
+      }
+    },
+    [unlock],
+  );
+
   useEffect(() => {
     if (!signedIn) {
       setReady(true);
       setHasPin(false);
+      setBiometrics({ face: false, fingerprint: false });
       setNeedsCreate(false);
       setUnlocked(true);
       setPin('');
@@ -56,16 +92,32 @@ export function AppLock({ children }: { children: ReactNode }) {
       if (!signedIn) {
         return;
       }
-      if (next === 'background' && hasPin) {
+      if (next === 'background' && lockRequired) {
         setUnlocked(false);
         setPin('');
       }
       if (next === 'active') {
-        void getAppPin().then((stored) => setHasPin(Boolean(stored)));
+        void Promise.all([getAppPin(), enabledUnlockBiometrics()]).then(([stored, nextBiometrics]) => {
+          setHasPin(Boolean(stored));
+          setBiometrics(nextBiometrics);
+        });
       }
     });
     return () => sub.remove();
-  }, [hasPin, signedIn]);
+  }, [lockRequired, signedIn]);
+
+  useEffect(() => {
+    if (!signedIn || unlocked || !ready || needsCreate) {
+      return;
+    }
+    if (biometrics.face) {
+      void tryBiometric('face');
+      return;
+    }
+    if (biometrics.fingerprint) {
+      void tryBiometric('fingerprint');
+    }
+  }, [biometrics.face, biometrics.fingerprint, needsCreate, ready, signedIn, tryBiometric, unlocked]);
 
   if (!signedIn) {
     return <>{children}</>;
@@ -121,27 +173,37 @@ export function AppLock({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!hasPin || unlocked) {
+  if (!lockRequired || unlocked) {
     return <>{children}</>;
   }
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]}>
       <Text style={styles.title}>Unlock</Text>
-      <Input label="PIN" value={pin} onChangeText={setPin} keyboardType="number-pad" secureTextEntry />
-      <Button
-        label="Unlock"
-        onPress={() => {
-          void getAppPin().then((stored) => {
-            if (stored && stored === pin) {
-              setUnlocked(true);
-              setPin('');
-              return;
-            }
-            Alert.alert('PIN', 'That PIN is incorrect.');
-          });
-        }}
-      />
+      {biometrics.face ? (
+        <Button label="Unlock with Face" onPress={() => void tryBiometric('face')} />
+      ) : null}
+      {biometrics.fingerprint ? (
+        <Button label="Unlock with fingerprint" onPress={() => void tryBiometric('fingerprint')} />
+      ) : null}
+      {hasPin ? (
+        <>
+          <Input label="App PIN" value={pin} onChangeText={setPin} keyboardType="number-pad" secureTextEntry />
+          <Button
+            label="Unlock with PIN"
+            variant={biometrics.face || biometrics.fingerprint ? 'secondary' : 'primary'}
+            onPress={() => {
+              void getAppPin().then((stored) => {
+                if (stored && stored === pin) {
+                  unlock();
+                  return;
+                }
+                Alert.alert('PIN', 'That PIN is incorrect.');
+              });
+            }}
+          />
+        </>
+      ) : null}
     </View>
   );
 }

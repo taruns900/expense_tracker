@@ -44,7 +44,7 @@ Build a mobile expense app that:
 - Categories and subcategories as user-managed master data (not hard-coded). **Vendors deferred.**
 - Production API on **Render**; **Neon** PostgreSQL for cloud records **per `userId`**.
 - Human-readable expense ID `DDMMYY-HHMMSS` plus internal UUID (unique per user in the cloud).
-- JWT auth required on launch (phone + password); refresh token 30 days; optional in-app PIN from Settings.
+- JWT auth required on launch (phone + password); refresh token 30 days; optional in-app PIN; optional Face / fingerprint unlock toggles in Settings.
 - No emojis in the UI; consistent icon set and design system.
 
 
@@ -229,7 +229,8 @@ Push and pull are authorized with JWT. The server stamps **`userId` from the tok
 
 ### Engine responsibilities
 
-- Detect connectivity.
+- Detect connectivity; when the device comes back online, drain the queue immediately.
+- After each local create, update, or delete (expenses, categories, subcategories), attempt a background push if the network is available.
 - Drain `PENDING` / `FAILED` items in stable order (masters before expenses).
 - Upload JSON payloads only. Do not upload receipt files in V1.
 - Map HTTP success to `SYNCED`; failures increment `retryCount` and set `FAILED`.
@@ -288,7 +289,7 @@ Exact sync payload shape is finalized in Phase 5; keep it batch-oriented (`chang
 
 Bottom tabs (exactly three): **Home** (dashboard), **Add** (center), **More**. Home and More are root screens with no back button. The bar is flat white (72dp + safe area), subtle top border `#E5E7EB`, no FAB or curved notch; Add uses an inline filled green circle icon. Active tab green icon/label; inactive gray. Tapping Add does not change the selected tab; it opens a tall centered fade-in add-expense popup on the current screen. After save, a centered fade-in confirmation popup lists every entered field as two columns (label left, value right). Short labels and values stay on one line; long description text wraps in the value column. Done returns to Home. Home has an outline history icon in the title row that opens the Expenses list.
 
-**More:** Expenses (full list, search, filters), Categories, Subcategories, Vendors, Reports, Business Profile, Data Management, Settings (account, log out, in-app PIN; no login form).
+**More:** Expenses (full list, search, filters), Categories, Subcategories, Vendors, Reports, Business Profile, Data Management, Settings (account, log out, in-app PIN, Face / fingerprint unlock toggles; no login form).
 
 ### Fast add
 
@@ -429,7 +430,7 @@ Not part of the V1 MVP. Implementation order and exit criteria live in **section
 ### Phase 10 — Security and data safety
 
 - Production JWT flow on **launch** (phone + password, or sign up with name, phone, recovery email); token storage in secure storage; **user-scoped sync** (each login is a separate Neon dataset).
-- Refresh tokens last **30 days**. Optional **in-app PIN** (create, update, remove in Settings) locks the signed-in app. Do not prompt for a phone OS lock.
+- Refresh tokens last **30 days**. Optional **in-app PIN** (create, update, remove in Settings) is separate from the phone lock. If Face or fingerprint is enrolled on the device, Settings exposes **Face** and **Fingerprint** toggles to unlock this app. Biometric prompts must not fall back to the phone PIN. Do not prompt the user to set a phone OS lock.
 - Logout clears on-device financial data; re-login pulls that account from Neon.
 - Validate all API input (no cloud file URLs in V1).
 - Manual export (and backup/restore if time allows; export is the V1 must).
@@ -486,7 +487,7 @@ After every code change, confirm `npm run typecheck` passes and that a running E
 - [ ] Authenticated APIs
 - [ ] Server-side validation of amounts, FKs, file types/sizes (local attachments)
 - [ ] Users only see their own account’s data
-- [ ] Secure token storage (refresh 30 days); optional in-app PIN from Settings
+- [ ] Secure token storage (refresh 30 days); optional in-app PIN; optional Face / fingerprint unlock from Settings
 
 ---
 

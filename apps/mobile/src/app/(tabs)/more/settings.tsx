@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Button, Input } from '@/components';
-import { colors, spacing, typography } from '@/components/theme';
+import { colors, spacing, touchTarget, typography } from '@/components/theme';
 import { authService } from '@/services/auth';
+import {
+  getBiometricAvailability,
+  getBiometricSettings,
+  setBiometricEnabled,
+  type BiometricAvailability,
+  type BiometricSettings,
+} from '@/services/appBiometrics';
 import { clearAppPin, getAppPin, isValidAppPin, setAppPin } from '@/services/appPin';
 import { useSessionStore } from '@/store';
 
@@ -15,10 +22,26 @@ export default function SettingsScreen() {
   const [hasPin, setHasPin] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [available, setAvailable] = useState<BiometricAvailability>({ face: false, fingerprint: false });
+  const [biometrics, setBiometrics] = useState<BiometricSettings>({ face: false, fingerprint: false });
+
+  const loadLockSettings = useCallback(async () => {
+    const [stored, nextAvailable, nextSettings] = await Promise.all([
+      getAppPin(),
+      getBiometricAvailability(),
+      getBiometricSettings(),
+    ]);
+    setHasPin(Boolean(stored));
+    setAvailable(nextAvailable);
+    setBiometrics({
+      face: nextAvailable.face && nextSettings.face,
+      fingerprint: nextAvailable.fingerprint && nextSettings.fingerprint,
+    });
+  }, []);
 
   useEffect(() => {
-    void getAppPin().then((stored) => setHasPin(Boolean(stored)));
-  }, []);
+    void loadLockSettings();
+  }, [loadLockSettings]);
 
   function savePin() {
     if (!isValidAppPin(pin)) {
@@ -34,6 +57,12 @@ export default function SettingsScreen() {
       setPin('');
       setConfirmPin('');
       Alert.alert('Saved', hasPin ? 'App PIN updated.' : 'App PIN created.');
+    });
+  }
+
+  function toggleBiometric(kind: 'face' | 'fingerprint', enabled: boolean) {
+    void setBiometricEnabled(kind, enabled).then(() => {
+      setBiometrics((current) => ({ ...current, [kind]: enabled }));
     });
   }
 
@@ -89,6 +118,30 @@ export default function SettingsScreen() {
           }}
         />
       ) : null}
+
+      {available.face || available.fingerprint ? <Text style={styles.title}>Biometrics</Text> : null}
+      {available.face ? (
+        <View style={styles.toggleRow}>
+          <Text style={styles.body}>Face</Text>
+          <Switch
+            value={biometrics.face}
+            onValueChange={(value) => toggleBiometric('face', value)}
+            trackColor={{ false: colors.border, true: colors.primaryMuted }}
+            thumbColor={biometrics.face ? colors.primary : colors.tabInactive}
+          />
+        </View>
+      ) : null}
+      {available.fingerprint ? (
+        <View style={styles.toggleRow}>
+          <Text style={styles.body}>Fingerprint</Text>
+          <Switch
+            value={biometrics.fingerprint}
+            onValueChange={(value) => toggleBiometric('fingerprint', value)}
+            trackColor={{ false: colors.border, true: colors.primaryMuted }}
+            thumbColor={biometrics.fingerprint ? colors.primary : colors.tabInactive}
+          />
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -111,5 +164,12 @@ const styles = StyleSheet.create({
   hint: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  toggleRow: {
+    minHeight: touchTarget,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
 });
