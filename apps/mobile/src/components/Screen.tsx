@@ -9,12 +9,11 @@ import { safeGoBack } from '@/utils/navigation';
 
 type Props = ViewProps & {
   title: string;
-  subtitle?: string;
   showBack?: boolean;
   headerRight?: ReactNode;
 };
 
-export function Screen({ title, subtitle, showBack = true, headerRight, children, style, ...rest }: Props) {
+export function Screen({ title, showBack = true, headerRight, children, style, ...rest }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -35,7 +34,6 @@ export function Screen({ title, subtitle, showBack = true, headerRight, children
           <Text accessibilityRole="header" style={styles.title}>
             {title}
           </Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
         {headerRight ? <View style={styles.headerRight}>{headerRight}</View> : null}
       </View>
@@ -77,11 +75,6 @@ const styles = StyleSheet.create({
   title: {
     ...typography.title,
     color: colors.text,
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginTop: spacing.xxs,
   },
   body: {
     flex: 1,

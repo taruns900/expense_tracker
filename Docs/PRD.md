@@ -1365,7 +1365,7 @@ Open app
    ↓
 Valid refresh token (up to 30 days)?
    ├── No → Login (phone + password) or Sign up
-   └── Yes → Device lock (Face ID / fingerprint / phone PIN, whatever the OS offers)
+   └── Yes → App PIN (if the user has set one in Settings)
          ↓
        Home (SQLite; sync that account only to Neon)
 ```
@@ -1379,7 +1379,7 @@ Rules:
 - Neon rows for expenses, categories, subcategories, and the change log carry **`userId` from the JWT**. The client cannot choose another user’s id.
 - `GET /sync/changes` returns only the signed-in user’s changes. Users never see another account’s data.
 - Logging out **clears data on this device** (cloud data stays on the account). Signing back in **pulls that account** from the cloud. Signing in as a **different** account also replaces local data.
-- Access and refresh tokens are stored in secure storage. Refresh tokens last **30 days**. Returning to the app while still signed in requires the **phone’s** biometric or device PIN (not a separate in-app PIN). That lock does not separate Neon tenants.
+- Access and refresh tokens are stored in secure storage. Refresh tokens last **30 days**. An optional **in-app PIN** (create, update, or remove in Settings) locks the app on this device. The app must **not** require or prompt for a phone OS lock (Face ID / device PIN). The app PIN does not separate Neon tenants.
 
 No complicated RBAC system is required. Shared-business access is out of this slice. Email/SMS OTP is not required in this slice; an operator with database access may replace `passwordHash` with a new bcrypt hash.
 
@@ -1391,7 +1391,7 @@ The UI should be:
 
 ### Clean
 
-Avoid unnecessary visual elements.
+Avoid unnecessary visual elements. Screen headings have **no** short description underneath.
 
 ### Simple
 
@@ -2135,7 +2135,7 @@ The MVP is complete when the user can:
 43. Synchronize expenses with the backend (Render → Neon), **scoped to the signed-in user**.
 44. Synchronize categories (and subcategories).
 45. Synchronize vendors. (**later version**)
-45a. Register (name, phone, password, recovery email) or log in with phone + password on launch; cloud data is isolated per account; refresh session lasts 30 days; device biometrics/PIN unlock while signed in.
+45a. Register (name, phone, password, recovery email) or log in with phone + password on launch; cloud data is isolated per account; refresh session lasts 30 days; optional in-app PIN from Settings (not a phone OS lock).
 46. Retry failed synchronization.
 47. Prevent duplicate records.
 
@@ -2230,7 +2230,7 @@ V1 MVP checklist: items **1–39** and **43–50** (48 items). Items **40–42**
 ## Phase 10: Security and Data Safety
 
 - Authentication
-- PIN/biometric lock
+- PIN/in-app lock (Settings; not a phone OS lock)
 - Secure storage
 - HTTPS + JWT
 - Data export

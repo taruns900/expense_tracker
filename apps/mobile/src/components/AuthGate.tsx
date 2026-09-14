@@ -59,11 +59,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
         ]}
         keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>{mode === 'login' ? 'Log in' : 'Create account'}</Text>
-        <Text style={styles.body}>
-          {mode === 'login'
-            ? 'Use your phone number and password. Each login keeps its own expenses in the cloud.'
-            : 'New accounts are stored separately. Recovery email is only used if you need a password reset later.'}
-        </Text>
         {mode === 'signup' ? (
           <Input label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
         ) : null}
@@ -115,9 +110,5 @@ const styles = StyleSheet.create({
   title: {
     ...typography.title,
     color: colors.text,
-  },
-  body: {
-    ...typography.body,
-    color: colors.textSecondary,
   },
 });

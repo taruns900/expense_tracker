@@ -18,7 +18,7 @@ export default function MoreScreen() {
   const router = useRouter();
 
   return (
-    <Screen title="More" subtitle="Manage lists, reports, and app settings." showBack={false}>
+    <Screen title="More" showBack={false}>
       <View style={styles.list}>
         {ITEMS.map((item) => (
           <Pressable

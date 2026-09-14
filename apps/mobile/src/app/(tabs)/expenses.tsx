@@ -70,7 +70,7 @@ export default function ExpensesScreen() {
   const subName = subcategories.find((item) => item.id === draft.subCategoryId)?.name;
 
   return (
-    <Screen title="Expenses" subtitle="Search and filter expenses from this list.">
+    <Screen title="Expenses">
       <View style={styles.wrap}>
       <Input
         label="Search"

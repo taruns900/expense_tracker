@@ -49,7 +49,6 @@ export default function HomeScreen() {
   return (
     <Screen
       title="Home"
-      subtitle="Spending on this device, even without internet."
       showBack={false}
       headerRight={
         <IconButton
@@ -99,9 +98,7 @@ export default function HomeScreen() {
 
         <Card>
           <Text style={styles.section}>Top categories</Text>
-          {top.length === 0 ? (
-            <Text style={styles.hint}>Category totals appear after you save expenses.</Text>
-          ) : (
+          {top.length === 0 ? null : (
             <BarList items={top.slice(0, 5).map((item) => ({ label: item.name, total: item.total }))} horizontal />
           )}
         </Card>
@@ -113,9 +110,6 @@ export default function HomeScreen() {
 
         <Card>
           <Text style={styles.section}>Monthly history</Text>
-          {months.length > 5 ? (
-            <Text style={styles.hint}>Showing five months at a time. Scroll for earlier months.</Text>
-          ) : null}
           <MonthScroller items={months} />
         </Card>
       </ScrollView>

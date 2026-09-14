@@ -40,10 +40,6 @@ export default function DataManagementScreen() {
       <Text style={styles.body}>Pending: {counts.pending}</Text>
       <Text style={styles.body}>Failed: {counts.failed}</Text>
       <Text style={styles.body}>Synced: {counts.synced}</Text>
-      <Text style={styles.hint}>
-        Sync runs automatically. If something fails you will see: Some changes couldn’t be synced. We’ll
-        try again automatically.
-      </Text>
       <Button
         label={syncing ? 'Syncing…' : 'Try sync now'}
         disabled={syncing}
@@ -93,10 +89,5 @@ const styles = StyleSheet.create({
   body: {
     ...typography.body,
     color: colors.text,
-  },
-  hint: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginVertical: spacing.sm,
   },
 });

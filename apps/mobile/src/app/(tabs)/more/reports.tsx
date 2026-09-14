@@ -1,7 +1,7 @@
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components';
-import { colors, spacing, typography } from '@/components/theme';
+import { colors, spacing } from '@/components/theme';
 import { pdfService } from '@/services/pdf';
 import { useUiStore } from '@/store';
 import { toUserMessage } from '@/utils/userError';
@@ -12,9 +12,6 @@ export default function ReportsScreen() {
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.body}>
-        Export a PDF of the expenses currently matching search and filters on the Expenses list.
-      </Text>
       <Button
         label="Export filtered report"
         onPress={() => {
@@ -33,9 +30,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: spacing.lg,
     gap: spacing.md,
-  },
-  body: {
-    ...typography.body,
-    color: colors.textSecondary,
   },
 });
