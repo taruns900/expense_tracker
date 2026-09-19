@@ -31,6 +31,9 @@ export const ENTITY_TYPES = [
   'vendor',
   'attachment',
   'business_profile',
+  'budget',
+  'debt_person',
+  'debt_transaction',
 ] as const;
 
 export type EntityType = (typeof ENTITY_TYPES)[number];

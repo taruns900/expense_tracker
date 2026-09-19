@@ -11,6 +11,9 @@ export async function resetLocalData(options: ResetOptions = {}): Promise<void> 
   await db.execAsync(`
     DELETE FROM expense_attachments;
     DELETE FROM expenses;
+    DELETE FROM debt_transactions;
+    DELETE FROM debt_people;
+    DELETE FROM budgets;
     DELETE FROM sub_categories;
     DELETE FROM categories;
     DELETE FROM vendors;

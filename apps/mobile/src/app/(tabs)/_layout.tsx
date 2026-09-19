@@ -59,6 +59,19 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="budget"
+          options={{
+            title: 'Budget',
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon
+                name={focused ? 'pie-chart' : 'pie-chart-outline'}
+                color={color}
+                focused={focused}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="add"
           listeners={{
             tabPress: (event) => {
@@ -81,6 +94,19 @@ export default function TabLayout() {
                 style={({ pressed }) => [style, pressed && styles.addTabPressed]}>
                 {children}
               </Pressable>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="debt"
+          options={{
+            title: 'Debt',
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon
+                name={focused ? 'people' : 'people-outline'}
+                color={color}
+                focused={focused}
+              />
             ),
           }}
         />

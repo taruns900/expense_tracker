@@ -6,7 +6,8 @@
     "start": "tsx src/main.ts",
     "start:dev": "tsx watch src/main.ts",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:migrate:dev": "prisma migrate dev",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

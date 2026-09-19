@@ -206,6 +206,9 @@ Generate `expenseId` on the device at save time so offline records already have 
 - **ExpenseAttachment (V2):** metadata in SQLite (`fileName`, `fileType`, `fileSize`, `localFilePath`, `cloudObjectPath`, `syncStatus`). Table ships in V1 migrations but UI and services stay disabled until V2.
 - **Business profile:** deferred (tables remain; not synced or linked in More).
 - **SyncQueue:** `entityType`, `entityId`, `operation`, `payload`, `retryCount`, `status`.
+- **Budget:** `categoryId`, `periodType`, `periodStart`, `periodEnd`, `amount`; unique per `(userId, categoryId, periodStart, periodEnd)` in Neon; unique per `(categoryId, periodStart, periodEnd)` locally when not deleted.
+- **DebtPerson:** `name`, `mobileNumber`, `direction` (`TAKEN` | `GIVEN`); unique `(userId, mobileNumber)`.
+- **DebtTransaction:** `personId`, `type`, `amount`, `transactionDate`, optional `note`; balance computed in services (shared helpers in `packages/shared`).
 
 
 
@@ -223,7 +226,7 @@ Generate `expenseId` on the device at save time so offline records already have 
 
 ### Queue operations
 
-`CREATE`, `UPDATE`, `DELETE` for expenses, categories, and subcategories. Vendor and business-profile queue entries are **deferred** (not pushed). Attachment queue entries are **V2** only.
+`CREATE`, `UPDATE`, `DELETE` for expenses, categories, subcategories, **budgets**, **debt_person**, and **debt_transaction**. Vendor and business-profile queue entries are **deferred** (not pushed). Attachment queue entries are **V2** only. Push order: masters → expenses → budgets → debt people → debt transactions.
 
 Push and pull are authorized with JWT. The server stamps **`userId` from the token** on every upsert and change-log row. Pull uses `GET /sync/changes?since=` filtered by that `userId`.
 

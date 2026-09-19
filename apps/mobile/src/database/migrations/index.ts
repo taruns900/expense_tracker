@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { INIT_MIGRATION_SQL } from './001_init';
 import { migrateVendorFields } from './002_vendor_fields';
+import { migrateBudgetDebt } from './003_budget_debt';
 
 type Migration = {
   version: number;
@@ -12,6 +13,7 @@ type Migration = {
 const MIGRATIONS: Migration[] = [
   { version: 1, sql: INIT_MIGRATION_SQL },
   { version: 2, run: migrateVendorFields },
+  { version: 3, run: migrateBudgetDebt },
 ];
 
 export async function runMigrations(db: SQLiteDatabase): Promise<number> {

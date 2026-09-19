@@ -92,7 +92,10 @@ export async function listDrainable(): Promise<SyncQueueRecord[]> {
     vendor: 2,
     business_profile: 3,
     expense: 4,
-    attachment: 5,
+    budget: 5,
+    debt_person: 6,
+    debt_transaction: 7,
+    attachment: 8,
   };
   return items
     .filter((item) => item.status === 'PENDING' || item.status === 'FAILED')
@@ -223,6 +226,107 @@ export async function enqueueMissingLocalChanges(): Promise<void> {
       },
     });
   }
+
+  const budgets = await getDatabase().getAllAsync<{
+    id: string;
+    category_id: string;
+    period_type: string;
+    period_start: string;
+    period_end: string;
+    amount: number;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+  }>(
+    `SELECT id, category_id, period_type, period_start, period_end, amount, created_at, updated_at, deleted_at
+     FROM budgets WHERE sync_status != 'SYNCED'`,
+  );
+  for (const row of budgets) {
+    if (open.has(`budget:${row.id}`)) {
+      continue;
+    }
+    await enqueueSync({
+      entityType: 'budget',
+      entityId: row.id,
+      operation: row.deleted_at ? 'DELETE' : 'UPDATE',
+      payload: {
+        id: row.id,
+        categoryId: row.category_id,
+        periodType: row.period_type,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+        amount: row.amount,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+    });
+  }
+
+  const debtPeople = await getDatabase().getAllAsync<{
+    id: string;
+    name: string;
+    mobile_number: string;
+    direction: string;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+  }>(
+    `SELECT id, name, mobile_number, direction, created_at, updated_at, deleted_at
+     FROM debt_people WHERE sync_status != 'SYNCED'`,
+  );
+  for (const row of debtPeople) {
+    if (open.has(`debt_person:${row.id}`)) {
+      continue;
+    }
+    await enqueueSync({
+      entityType: 'debt_person',
+      entityId: row.id,
+      operation: row.deleted_at ? 'DELETE' : 'UPDATE',
+      payload: {
+        id: row.id,
+        name: row.name,
+        mobileNumber: row.mobile_number,
+        direction: row.direction,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+    });
+  }
+
+  const debtTransactions = await getDatabase().getAllAsync<{
+    id: string;
+    person_id: string;
+    type: string;
+    amount: number;
+    transaction_date: string;
+    note: string | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+  }>(
+    `SELECT id, person_id, type, amount, transaction_date, note, created_at, updated_at, deleted_at
+     FROM debt_transactions WHERE sync_status != 'SYNCED'`,
+  );
+  for (const row of debtTransactions) {
+    if (open.has(`debt_transaction:${row.id}`)) {
+      continue;
+    }
+    await enqueueSync({
+      entityType: 'debt_transaction',
+      entityId: row.id,
+      operation: row.deleted_at ? 'DELETE' : 'UPDATE',
+      payload: {
+        id: row.id,
+        personId: row.person_id,
+        type: row.type,
+        amount: row.amount,
+        transactionDate: row.transaction_date,
+        note: row.note,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+    });
+  }
 }
 
 export async function markEntitySynced(entityType: string, entityId: string): Promise<void> {
@@ -242,6 +346,24 @@ export async function markEntitySynced(entityType: string, entityId: string): Pr
   }
   if (entityType === 'expense') {
     await getDatabase().runAsync("UPDATE expenses SET sync_status = 'SYNCED' WHERE id = ?", entityId);
+    return;
+  }
+  if (entityType === 'budget') {
+    await getDatabase().runAsync("UPDATE budgets SET sync_status = 'SYNCED' WHERE id = ?", entityId);
+    return;
+  }
+  if (entityType === 'debt_person') {
+    await getDatabase().runAsync(
+      "UPDATE debt_people SET sync_status = 'SYNCED' WHERE id = ?",
+      entityId,
+    );
+    return;
+  }
+  if (entityType === 'debt_transaction') {
+    await getDatabase().runAsync(
+      "UPDATE debt_transactions SET sync_status = 'SYNCED' WHERE id = ?",
+      entityId,
+    );
   }
 }
 

@@ -22,7 +22,14 @@ type SyncChange = {
   data: Record<string, unknown>;
 };
 
-const SYNCABLE = new Set(['category', 'subcategory', 'expense']);
+const SYNCABLE = new Set([
+  'category',
+  'subcategory',
+  'expense',
+  'budget',
+  'debt_person',
+  'debt_transaction',
+]);
 
 @Controller()
 @UseGuards(JwtAuthGuard)
@@ -257,6 +264,159 @@ export class SyncController {
           updatedAt,
         },
       });
+    }
+
+    if (change.entityType === 'budget') {
+      const categoryId = String(data.categoryId ?? '');
+      const periodStart = String(data.periodStart ?? '');
+      const periodEnd = String(data.periodEnd ?? '');
+      const amount = Number(data.amount ?? 0);
+      if (!(amount > 0)) {
+        throw new ForbiddenException('Budget amount must be greater than 0.');
+      }
+      const category = await this.prismaService.category.findUnique({
+        where: { userId_id: { userId, id: categoryId } },
+      });
+      if (!category || category.deletedAt) {
+        throw new ForbiddenException('Category not found.');
+      }
+      if (change.operation === 'DELETE') {
+        await this.prismaService.budget.updateMany({
+          where: { userId, id },
+          data: { deletedAt: updatedAt, updatedAt },
+        });
+        return;
+      }
+      const duplicate = await this.prismaService.budget.findFirst({
+        where: {
+          userId,
+          categoryId,
+          periodStart,
+          periodEnd,
+          deletedAt: null,
+          NOT: { id },
+        },
+      });
+      if (duplicate) {
+        throw new ForbiddenException('A budget already exists for this category and period.');
+      }
+      await this.prismaService.budget.upsert({
+        where: { userId_id: { userId, id } },
+        update: {
+          categoryId,
+          periodType: String(data.periodType ?? 'MONTHLY'),
+          periodStart,
+          periodEnd,
+          amount,
+          updatedAt,
+          deletedAt: null,
+        },
+        create: {
+          id,
+          userId,
+          categoryId,
+          periodType: String(data.periodType ?? 'MONTHLY'),
+          periodStart,
+          periodEnd,
+          amount,
+          createdAt,
+          updatedAt,
+        },
+      });
+      return;
+    }
+
+    if (change.entityType === 'debt_person') {
+      const mobileNumber = String(data.mobileNumber ?? '').replace(/\D/g, '');
+      const name = String(data.name ?? '').trim();
+      const direction = String(data.direction ?? 'TAKEN');
+      if (!name) {
+        throw new ForbiddenException('Name is required.');
+      }
+      if (!/^\d{10,15}$/.test(mobileNumber)) {
+        throw new ForbiddenException('Invalid mobile number.');
+      }
+      if (change.operation === 'DELETE') {
+        await this.prismaService.debtPerson.updateMany({
+          where: { userId, id },
+          data: { deletedAt: updatedAt, updatedAt },
+        });
+        return;
+      }
+      const duplicate = await this.prismaService.debtPerson.findFirst({
+        where: { userId, mobileNumber, deletedAt: null, NOT: { id } },
+      });
+      if (duplicate) {
+        throw new ForbiddenException('Mobile number already in use.');
+      }
+      await this.prismaService.debtPerson.upsert({
+        where: { userId_id: { userId, id } },
+        update: { name, mobileNumber, direction, updatedAt, deletedAt: null },
+        create: {
+          id,
+          userId,
+          name,
+          mobileNumber,
+          direction,
+          createdAt,
+          updatedAt,
+        },
+      });
+      return;
+    }
+
+    if (change.entityType === 'debt_transaction') {
+      const personId = String(data.personId ?? '');
+      const type = String(data.type ?? '');
+      const amount = Number(data.amount ?? 0);
+      const transactionDate = String(data.transactionDate ?? '');
+      if (!(amount > 0)) {
+        throw new ForbiddenException('Amount must be greater than 0.');
+      }
+      const person = await this.prismaService.debtPerson.findUnique({
+        where: { userId_id: { userId, id: personId } },
+      });
+      if (!person || person.deletedAt) {
+        throw new ForbiddenException('Person not found.');
+      }
+      const allowed =
+        person.direction === 'TAKEN'
+          ? new Set(['BORROWED', 'REPAID'])
+          : new Set(['GIVEN', 'RECEIVED']);
+      if (!allowed.has(type)) {
+        throw new ForbiddenException('Invalid transaction type.');
+      }
+      if (change.operation === 'DELETE') {
+        await this.prismaService.debtTransaction.updateMany({
+          where: { userId, id },
+          data: { deletedAt: updatedAt, updatedAt },
+        });
+        return;
+      }
+      await this.prismaService.debtTransaction.upsert({
+        where: { userId_id: { userId, id } },
+        update: {
+          personId,
+          type,
+          amount,
+          transactionDate,
+          note: data.note ? String(data.note) : null,
+          updatedAt,
+          deletedAt: null,
+        },
+        create: {
+          id,
+          userId,
+          personId,
+          type,
+          amount,
+          transactionDate,
+          note: data.note ? String(data.note) : null,
+          createdAt,
+          updatedAt,
+        },
+      });
+      return;
     }
 
     // Vendor and business_profile sync are deferred to a later version.

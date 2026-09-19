@@ -17,8 +17,11 @@ model User {
   updatedAt      DateTime      @updatedAt
   categories     Category[]
   subCategories  SubCategory[]
-  expenses       Expense[]
-  changeLogs     ChangeLog[]
+  expenses          Expense[]
+  budgets           Budget[]
+  debtPeople        DebtPerson[]
+  debtTransactions  DebtTransaction[]
+  changeLogs        ChangeLog[]
 }
 
 model Category {
@@ -111,6 +114,57 @@ model BusinessProfile {
   gstNumber    String?
   updatedAt    DateTime
   createdAt    DateTime
+}
+
+model Budget {
+  id          String
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId  String
+  periodType  String
+  periodStart String
+  periodEnd   String
+  amount      Float
+  createdAt   DateTime
+  updatedAt   DateTime
+  deletedAt   DateTime?
+
+  @@id([userId, id])
+  @@unique([userId, categoryId, periodStart, periodEnd])
+  @@index([userId])
+}
+
+model DebtPerson {
+  id           String
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  mobileNumber String
+  direction    String
+  createdAt    DateTime
+  updatedAt    DateTime
+  deletedAt    DateTime?
+
+  @@id([userId, id])
+  @@unique([userId, mobileNumber])
+  @@index([userId])
+}
+
+model DebtTransaction {
+  id              String
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personId        String
+  type            String
+  amount          Float
+  transactionDate String
+  note            String?
+  createdAt       DateTime
+  updatedAt       DateTime
+  deletedAt       DateTime?
+
+  @@id([userId, id])
+  @@index([userId, personId])
 }
 
 model ChangeLog {

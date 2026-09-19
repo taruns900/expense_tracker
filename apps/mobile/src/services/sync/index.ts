@@ -2,7 +2,10 @@ import * as Network from 'expo-network';
 
 import { APP_META_KEYS, getAppMeta, getDatabase, isDatabaseAvailable, setAppMeta } from '@/database';
 import {
+  budgetRepository,
   categoryRepository,
+  debtPersonRepository,
+  debtTransactionRepository,
   enqueueMissingLocalChanges,
   expenseRepository,
   listDrainable,
@@ -35,12 +38,22 @@ type SyncRunOptions = {
 const SYNC_FAILURE_MESSAGE =
   'Some changes couldn’t be synced. We’ll try again automatically.';
 
-const CLOUD_ENTITY_TYPES = new Set(['category', 'subcategory', 'expense']);
+const CLOUD_ENTITY_TYPES = new Set([
+  'category',
+  'subcategory',
+  'expense',
+  'budget',
+  'debt_person',
+  'debt_transaction',
+]);
 
 const APPLY_ORDER: Record<string, number> = {
   category: 0,
   subcategory: 1,
   expense: 2,
+  budget: 3,
+  debt_person: 4,
+  debt_transaction: 5,
 };
 
 function parsePayload(item: SyncQueueRecord): Record<string, unknown> {
@@ -339,6 +352,103 @@ async function applyRemoteChange(change: SyncChange): Promise<void> {
       await expenseRepository.insert(record);
     } else if (record.updatedAt >= existing.updatedAt) {
       await expenseRepository.update(record);
+    }
+  }
+
+  if (change.entityType === 'budget') {
+    if (change.operation === 'DELETE') {
+      await getDatabase().runAsync(
+        'UPDATE budgets SET deleted_at = ?, sync_status = ?, updated_at = ? WHERE id = ?',
+        timestamp,
+        'SYNCED',
+        timestamp,
+        id,
+      );
+      return;
+    }
+    const existing = await budgetRepository.getById(id);
+    const record = {
+      id,
+      categoryId: String(data.categoryId ?? ''),
+      periodType: String(data.periodType ?? 'MONTHLY') as import('@expense-tracker/shared').BudgetPeriodType,
+      periodStart: String(data.periodStart ?? ''),
+      periodEnd: String(data.periodEnd ?? ''),
+      amount: Number(data.amount ?? 0),
+      syncStatus: 'SYNCED' as const,
+      createdAt: String(data.createdAt ?? timestamp),
+      updatedAt: String(data.updatedAt ?? timestamp),
+    };
+    const category = await categoryRepository.getById(record.categoryId);
+    if (!category) {
+      return;
+    }
+    if (!existing) {
+      await budgetRepository.insert(record);
+    } else if (record.updatedAt >= existing.updatedAt) {
+      await budgetRepository.update(record);
+    }
+  }
+
+  if (change.entityType === 'debt_person') {
+    if (change.operation === 'DELETE') {
+      await getDatabase().runAsync(
+        'UPDATE debt_people SET deleted_at = ?, sync_status = ?, updated_at = ? WHERE id = ?',
+        timestamp,
+        'SYNCED',
+        timestamp,
+        id,
+      );
+      return;
+    }
+    const existing = await debtPersonRepository.getById(id);
+    const record = {
+      id,
+      name: String(data.name ?? ''),
+      mobileNumber: String(data.mobileNumber ?? ''),
+      direction: String(data.direction ?? 'TAKEN') as import('@expense-tracker/shared').DebtDirection,
+      syncStatus: 'SYNCED' as const,
+      createdAt: String(data.createdAt ?? timestamp),
+      updatedAt: String(data.updatedAt ?? timestamp),
+    };
+    if (!existing) {
+      await debtPersonRepository.insert(record);
+    } else if (record.updatedAt >= existing.updatedAt) {
+      await debtPersonRepository.update(record);
+    }
+  }
+
+  if (change.entityType === 'debt_transaction') {
+    if (change.operation === 'DELETE') {
+      await getDatabase().runAsync(
+        'UPDATE debt_transactions SET deleted_at = ?, sync_status = ?, updated_at = ? WHERE id = ?',
+        timestamp,
+        'SYNCED',
+        timestamp,
+        id,
+      );
+      return;
+    }
+    const personId = String(data.personId ?? '');
+    const person = await debtPersonRepository.getById(personId);
+    if (!person) {
+      return;
+    }
+    const existing = await debtTransactionRepository.getById(id);
+    const record = {
+      id,
+      personId,
+      type: String(data.type ?? 'BORROWED') as import('@expense-tracker/shared').DebtTransactionType,
+      amount: Number(data.amount ?? 0),
+      transactionDate: String(data.transactionDate ?? ''),
+      note: data.note ? String(data.note) : null,
+      syncStatus: 'SYNCED' as const,
+      createdAt: String(data.createdAt ?? timestamp),
+      updatedAt: String(data.updatedAt ?? timestamp),
+    };
+    if (!existing) {
+      await debtTransactionRepository.insert(record);
+    } else if (record.updatedAt >= existing.updatedAt) {
+      await debtTransactionRepository.update(record);
     }
   }
 }

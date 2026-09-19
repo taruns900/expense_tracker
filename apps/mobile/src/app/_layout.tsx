@@ -33,6 +33,7 @@ export default function RootLayout() {
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="expense/[id]/index" options={{ title: 'Expense' }} />
                 <Stack.Screen name="expense/[id]/edit" options={{ title: 'Edit expense' }} />
+                <Stack.Screen name="debt/[id]/index" options={{ title: 'Debt' }} />
               </Stack>
             </HardwareBackHandler>
           </AppLock>

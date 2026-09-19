@@ -132,6 +132,8 @@ Offline operations include:
 - Manage subcategories
 - Generate expense PDF
 - Generate expense reports where data is locally available
+- Create and manage **budgets** (per category and period) offline
+- Track **debt** with people and transactions offline
 
 ---
 
@@ -167,6 +169,27 @@ The dashboard should provide:
 Home does not show a recent-expense list. Full history is **More → Expenses**.
 
 V1 values are computed from local SQLite. Optional later AI insights on payment history must not replace these widgets (see Future AI Insights).
+
+Home also shows **category-wise budget remaining** for budget periods that include today. Each line shows period type, period label, and **remaining only** (budget minus matching expenses in that period; negative values allowed). No global budget totals on Home.
+
+Bottom navigation: **Home**, **Budget**, **Add** (center), **Debt**, **More**.
+
+---
+
+## G5. Budget (V1)
+
+- Budget = existing **category** + period type (`DAILY`, `WEEKLY`, `MONTHLY`, `QUARTERLY`, `YEARLY`) + deterministic `periodStart` / `periodEnd` + amount `> 0`.
+- Uniqueness: one budget per category per exact period (enforced locally and in the cloud).
+- Remaining = budget amount minus sum of expenses for that category with `expenseDate` in `[periodStart, periodEnd]`. Not stored as authoritative balance.
+- Budget screens do not create categories.
+
+## G6. Debt (V1)
+
+- **Debt person:** name + **unique mobile number per account**; direction `TAKEN` (you owe) or `GIVEN` (they owe you).
+- **Transactions:** `BORROWED` / `REPAID` (taken) or `GIVEN` / `RECEIVED` (given); amount `> 0`; `transactionDate` (past, today, or future); optional note.
+- Outstanding is derived from transactions only. **Debt transactions are not expenses** (no automatic expense rows).
+
+Income, loans, and linked cash-flow are **out of scope** for V1.
 
 ---
 

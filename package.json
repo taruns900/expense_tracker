@@ -9,6 +9,7 @@
     "android": "npm --prefix apps/mobile run android",
     "mobile": "npm --prefix apps/mobile start",
     "api": "npm --prefix apps/api start",
-    "typecheck": "npm --prefix apps/mobile run typecheck && npm --prefix packages/shared run typecheck"
+    "typecheck": "npm --prefix apps/mobile run typecheck && npm --prefix packages/shared run typecheck && npm --prefix apps/api run typecheck",
+    "test": "npm --prefix packages/shared run test"
   }
 }

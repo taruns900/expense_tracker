@@ -245,6 +245,20 @@ export const expenseRepository = {
     return row?.total ?? 0;
   },
 
+  async sumForCategoryBetween(categoryId: string, from: string, to: string): Promise<number> {
+    if (!isDatabaseAvailable()) {
+      return 0;
+    }
+    const row = await getDatabase().getFirstAsync<{ total: number | null }>(
+      `SELECT SUM(amount) as total FROM expenses
+       WHERE deleted_at IS NULL AND category_id = ? AND expense_date >= ? AND expense_date <= ?`,
+      categoryId,
+      from,
+      to,
+    );
+    return row?.total ?? 0;
+  },
+
   async totalsByDate(from: string, to: string): Promise<Array<{ date: string; total: number }>> {
     if (!isDatabaseAvailable()) {
       return [];

@@ -7,6 +7,7 @@ import { Card, IconButton, Screen } from '@/components';
 import { BarList } from '@/components/BarList';
 import { MonthScroller } from '@/components/MonthScroller';
 import { colors, spacing, typography } from '@/components/theme';
+import { dashboardBudgetGroups } from '@/features/budget';
 import { dashboardService } from '@/features/dashboard';
 import { useSessionStore } from '@/store';
 import { formatInr } from '@/utils/money';
@@ -24,20 +25,25 @@ export default function HomeScreen() {
     percent: number;
     direction: 'increase' | 'decrease' | 'flat';
   } | null>(null);
+  const [budgetGroups, setBudgetGroups] = useState<
+    Awaited<ReturnType<typeof dashboardBudgetGroups>>
+  >([]);
 
   const load = useCallback(async () => {
-    const [nextSummary, nextDays, nextMonths, nextTop, nextMom] = await Promise.all([
+    const [nextSummary, nextDays, nextMonths, nextTop, nextMom, nextBudgets] = await Promise.all([
       dashboardService.summary(),
       dashboardService.last7DaysSeries(),
       dashboardService.monthSeries(),
       dashboardService.topCategories(),
       dashboardService.monthOverMonth(),
+      dashboardBudgetGroups(),
     ]);
     setSummary(nextSummary);
     setLast7Days(nextDays);
     setMonths(nextMonths);
     setTop(nextTop);
     setMom(nextMom);
+    setBudgetGroups(nextBudgets);
   }, [dataEpoch]);
 
   useFocusEffect(
@@ -76,6 +82,31 @@ export default function HomeScreen() {
             <Text style={styles.statValue}>{formatInr(summary.yearTotal)}</Text>
           </Card>
         </View>
+
+        {budgetGroups.length > 0 ? (
+          <Card>
+            <Text style={styles.section}>Budget remaining</Text>
+            {budgetGroups.map((group) => (
+              <View key={group.categoryId} style={styles.budgetGroup}>
+                <Text style={styles.budgetCategory}>{group.categoryName}</Text>
+                {group.lines.map((line) => (
+                  <View key={line.budgetId} style={styles.budgetLine}>
+                    <Text style={styles.budgetMeta}>
+                      {line.periodTypeLabel} · {line.periodLabel}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.budgetRemaining,
+                        line.remaining < 0 ? styles.budgetOver : null,
+                      ]}>
+                      {formatInr(line.remaining)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </Card>
+        ) : null}
 
         {mom ? (
           <Card>
@@ -154,6 +185,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+  },
+  budgetGroup: {
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  budgetCategory: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.xxs,
+  },
+  budgetLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  budgetMeta: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  budgetRemaining: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  budgetOver: {
+    color: colors.danger,
   },
   momText: {
     ...typography.body,
