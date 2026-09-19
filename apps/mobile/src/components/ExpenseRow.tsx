@@ -1,3 +1,4 @@
+import { expenseGrandTotal } from '@expense-tracker/shared';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/components/theme';
@@ -13,10 +14,11 @@ export function ExpenseRow({
   onPress: () => void;
 }) {
   const meta = [item.subCategoryName, item.paymentMethod].filter(Boolean).join(' · ');
+  const total = expenseGrandTotal(item.amount, item.gstAmount);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.expenseId} ${formatInr(item.amount)}`}
+      accessibilityLabel={`${item.expenseId} ${formatInr(total)}`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <View style={styles.main}>
@@ -28,7 +30,7 @@ export function ExpenseRow({
         </Text>
         {item.description ? <Text style={styles.meta}>{item.description}</Text> : null}
       </View>
-      <Text style={styles.amount}>{formatInr(item.amount)}</Text>
+      <Text style={styles.amount}>{formatInr(total)}</Text>
     </Pressable>
   );
 }

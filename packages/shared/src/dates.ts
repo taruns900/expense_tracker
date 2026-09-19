@@ -1,3 +1,10 @@
+/** Calendar day from `YYYY-MM-DD` or ISO datetime strings. */
+export function normalizeIsoDate(value: string): string {
+  const trimmed = value.trim();
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(trimmed);
+  return match ? match[1] : trimmed;
+}
+
 export function toIsoDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');

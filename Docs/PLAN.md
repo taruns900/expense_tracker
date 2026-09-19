@@ -192,7 +192,7 @@ Generate `expenseId` on the device at save time so offline records already have 
 | `subCategoryId`                                                          | No       | Must belong to `categoryId` when present                         |
 | `amount`                                                                 | Yes      | `> 0`                                                            |
 | `paymentMethod`                                                          | Yes      | Cash, UPI, Bank Transfer, Credit Card, Debit Card, Cheque, Other |
-| `description`, `vendorId`, `gstRate`, `gstAmount`, `billNumber`          | No       | Description max 200 characters. GST amount derived from rate × amount unless user overrides. No notes field on expenses. No payment-status field in V1. |
+| `description`, `vendorId`, `gstRate`, `gstAmount`, `billNumber`          | No       | Description max 200 characters. `gstRate` preset or custom 0–100. GST amount derived from rate × amount unless user overrides. Aggregations and list amounts use amount + gstAmount when GST is set. No notes field on expenses. No payment-status field in V1. |
 | `syncStatus`                                                             | Yes      | `SYNCED` | `PENDING` | `SYNCING` | `FAILED`                      |
 | `createdAt`, `updatedAt`                                                 | Yes      | `updatedAt` used for last-write-wins conflicts                   |
 
@@ -450,7 +450,7 @@ Not part of the V1 MVP. Implementation order and exit criteria live in **section
 
 | Area            | Rule                                                                                                |
 | --------------- | --------------------------------------------------------------------------------------------------- |
-| GST             | Optional rate 0 / 5 / 12 / 18 / 28; compute amount; no filing                                       |
+| GST             | Optional preset 0 / 5 / 12 / 18 / 28 or custom % (0–100); compute gstAmount; totals use amount + gstAmount; no filing |
 | Soft deactivate | Categories used by expenses stay resolvable in history (vendors when that feature returns)          |
 | Deletes         | Tombestone or queue `DELETE` so sync removes cloud rows                                             |
 | Currency        | INR display (`₹`) in V1                                                                             |

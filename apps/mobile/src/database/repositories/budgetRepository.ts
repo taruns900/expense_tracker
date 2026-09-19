@@ -1,4 +1,4 @@
-import type { BudgetPeriodType, SyncStatus } from '@expense-tracker/shared';
+import { normalizeIsoDate, type BudgetPeriodType, type SyncStatus } from '@expense-tracker/shared';
 
 import type { BudgetListItem, BudgetRecord } from '@/types/budget';
 
@@ -22,8 +22,8 @@ function mapBudget(row: BudgetRow): BudgetRecord {
     id: row.id,
     categoryId: row.category_id,
     periodType: row.period_type,
-    periodStart: row.period_start,
-    periodEnd: row.period_end,
+    periodStart: normalizeIsoDate(row.period_start),
+    periodEnd: normalizeIsoDate(row.period_end),
     amount: row.amount,
     syncStatus: row.sync_status,
     createdAt: row.created_at,

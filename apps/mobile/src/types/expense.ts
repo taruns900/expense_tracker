@@ -1,4 +1,4 @@
-import type { GstRate, PaymentMethod, SyncStatus } from '@expense-tracker/shared';
+import type { PaymentMethod, SyncStatus } from '@expense-tracker/shared';
 
 export type LocalExpense = {
   id: string;
@@ -9,7 +9,7 @@ export type LocalExpense = {
   amount: number;
   description: string | null;
   vendorId: string | null;
-  gstRate: GstRate | null;
+  gstRate: number | null;
   gstAmount: number | null;
   paymentMethod: PaymentMethod;
   billNumber: string | null;
@@ -33,7 +33,7 @@ export type ExpenseInput = {
   paymentMethod: PaymentMethod;
   description?: string | null;
   vendorId?: string | null;
-  gstRate?: GstRate | null;
+  gstRate?: number | null;
   gstAmount?: number | null;
   billNumber?: string | null;
 };

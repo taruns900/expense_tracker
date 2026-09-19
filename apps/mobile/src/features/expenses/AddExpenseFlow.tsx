@@ -1,3 +1,4 @@
+import { expenseGrandTotal } from '@expense-tracker/shared';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
@@ -35,6 +36,13 @@ function savedRows(expense: ExpenseListItem) {
   return [
     { label: 'Expense ID', value: expense.expenseId },
     { label: 'Amount', value: formatInr(expense.amount) },
+    {
+      label: 'Total',
+      value:
+        expense.gstRate !== null
+          ? formatInr(expenseGrandTotal(expense.amount, expense.gstAmount))
+          : null,
+    },
     { label: 'Date', value: formatDisplayDate(expense.expenseDate) },
     { label: 'Category', value: expense.categoryName },
     { label: 'Subcategory', value: expense.subCategoryName },

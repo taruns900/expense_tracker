@@ -68,7 +68,6 @@ export default function BudgetScreen() {
       await load();
     } catch (error) {
       Alert.alert("Couldn't save", toUserMessage(error, "The budget couldn't be saved."));
-      throw error;
     }
   }
 

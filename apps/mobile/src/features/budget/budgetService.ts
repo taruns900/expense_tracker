@@ -8,6 +8,7 @@ import {
   enqueueSync,
 } from '@/database/repositories';
 import { syncEngine } from '@/services/sync';
+import { useSessionStore } from '@/store';
 import type { BudgetInput, BudgetRecord } from '@/types/budget';
 import { createId } from '@/utils/ids';
 import { nowIso } from '@/utils/text';
@@ -92,6 +93,7 @@ export const budgetService = {
       });
     });
     syncEngine.request();
+    useSessionStore.getState().bumpDataEpoch();
     return record;
   },
 
@@ -123,6 +125,7 @@ export const budgetService = {
       });
     });
     syncEngine.request();
+    useSessionStore.getState().bumpDataEpoch();
   },
 
   async remove(id: string): Promise<void> {
@@ -144,6 +147,7 @@ export const budgetService = {
       });
     });
     syncEngine.request();
+    useSessionStore.getState().bumpDataEpoch();
   },
 };
 

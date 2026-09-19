@@ -3,6 +3,7 @@ import {
   endOfMonth,
   endOfWeek,
   endOfYear,
+  normalizeIsoDate,
   parseIsoDate,
   quarterBounds,
   quarterFromDate,
@@ -79,7 +80,25 @@ export function budgetRemaining(budgetAmount: number, spentTotal: number): numbe
 }
 
 export function isDateInPeriod(isoDate: string, periodStart: string, periodEnd: string): boolean {
-  return isoDate >= periodStart && isoDate <= periodEnd;
+  const day = normalizeIsoDate(isoDate);
+  const start = normalizeIsoDate(periodStart);
+  const end = normalizeIsoDate(periodEnd);
+  return day >= start && day <= end;
+}
+
+/** Budget counts for dashboard when its period contains the reference day. */
+export function isBudgetActiveOnDate(
+  budget: Pick<BudgetPeriodBounds, 'periodType' | 'periodStart' | 'periodEnd'>,
+  isoDate: string,
+  referenceDate = parseIsoDate(normalizeIsoDate(isoDate)),
+): boolean {
+  if (isDateInPeriod(isoDate, budget.periodStart, budget.periodEnd)) {
+    return true;
+  }
+  const canonical = activePeriodForType(budget.periodType, referenceDate);
+  const start = normalizeIsoDate(budget.periodStart);
+  const end = normalizeIsoDate(budget.periodEnd);
+  return start === canonical.periodStart && end === canonical.periodEnd;
 }
 
 export function activePeriodForType(periodType: BudgetPeriodType, now = new Date()): BudgetPeriodBounds {

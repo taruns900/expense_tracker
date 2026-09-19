@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Card, IconButton, Screen } from '@/components';
@@ -30,20 +30,24 @@ export default function HomeScreen() {
   >([]);
 
   const load = useCallback(async () => {
-    const [nextSummary, nextDays, nextMonths, nextTop, nextMom, nextBudgets] = await Promise.all([
+    const [nextSummary, nextDays, nextMonths, nextTop, nextMom] = await Promise.all([
       dashboardService.summary(),
       dashboardService.last7DaysSeries(),
       dashboardService.monthSeries(),
       dashboardService.topCategories(),
       dashboardService.monthOverMonth(),
-      dashboardBudgetGroups(),
     ]);
     setSummary(nextSummary);
     setLast7Days(nextDays);
     setMonths(nextMonths);
     setTop(nextTop);
     setMom(nextMom);
-    setBudgetGroups(nextBudgets);
+
+    try {
+      setBudgetGroups(await dashboardBudgetGroups());
+    } catch {
+      setBudgetGroups([]);
+    }
   }, [dataEpoch]);
 
   useFocusEffect(
@@ -51,6 +55,10 @@ export default function HomeScreen() {
       void load();
     }, [load]),
   );
+
+  useEffect(() => {
+    void load();
+  }, [dataEpoch, load]);
 
   return (
     <Screen

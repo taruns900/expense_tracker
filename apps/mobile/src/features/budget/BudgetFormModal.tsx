@@ -46,7 +46,7 @@ function monthOptions(): Array<{ id: string; label: string }> {
   const items: Array<{ id: string; label: string }> = [];
   for (let offset = -24; offset <= 12; offset += 1) {
     const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-    const id = `${d.getFullYear()}-${d.getMonth()}`;
+    const id = `${d.getFullYear()}:${d.getMonth()}`;
     items.push({
       id,
       label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
@@ -85,7 +85,7 @@ export function BudgetFormModal({ visible, editing, onClose, onSave }: Props) {
   const [dailyDate, setDailyDate] = useState(toIsoDate(new Date()));
   const [weekAnchor, setWeekAnchor] = useState(weekStartContaining(toIsoDate(new Date())));
   const [monthKey, setMonthKey] = useState(
-    `${new Date().getFullYear()}-${new Date().getMonth()}`,
+    `${new Date().getFullYear()}:${new Date().getMonth()}`,
   );
   const [quarterKey, setQuarterKey] = useState(
     `${new Date().getFullYear()}-Q${quarterFromDate(new Date())}`,
@@ -116,7 +116,7 @@ export function BudgetFormModal({ visible, editing, onClose, onSave }: Props) {
       setDailyDate(editing.periodStart);
       setWeekAnchor(editing.periodStart);
       const start = parseIsoDate(editing.periodStart);
-      setMonthKey(`${start.getFullYear()}-${start.getMonth()}`);
+      setMonthKey(`${start.getFullYear()}:${start.getMonth()}`);
       setQuarterKey(`${start.getFullYear()}-Q${quarterFromDate(start)}`);
       setYearKey(String(start.getFullYear()));
       return;
@@ -127,7 +127,7 @@ export function BudgetFormModal({ visible, editing, onClose, onSave }: Props) {
     setAmount('');
     setDailyDate(today);
     setWeekAnchor(weekStartContaining(today));
-    setMonthKey(`${new Date().getFullYear()}-${new Date().getMonth()}`);
+    setMonthKey(`${new Date().getFullYear()}:${new Date().getMonth()}`);
     setQuarterKey(`${new Date().getFullYear()}-Q${quarterFromDate(new Date())}`);
     setYearKey(String(new Date().getFullYear()));
   }, [visible, editing]);
@@ -139,7 +139,9 @@ export function BudgetFormModal({ visible, editing, onClose, onSave }: Props) {
       case 'WEEKLY':
         return resolveWeeklyPeriod(weekAnchor);
       case 'MONTHLY': {
-        const [year, month] = monthKey.split('-').map(Number);
+        const [yearPart, monthPart] = monthKey.split(':');
+        const year = Number(yearPart);
+        const month = Number(monthPart);
         return resolveMonthlyPeriod(year, month);
       }
       case 'QUARTERLY': {
@@ -162,13 +164,17 @@ export function BudgetFormModal({ visible, editing, onClose, onSave }: Props) {
     if (!categoryId) {
       return;
     }
-    await onSave({
-      categoryId,
-      periodType,
-      periodStart: bounds.periodStart,
-      periodEnd: bounds.periodEnd,
-      amount: parsed,
-    });
+    try {
+      await onSave({
+        categoryId,
+        periodType,
+        periodStart: bounds.periodStart,
+        periodEnd: bounds.periodEnd,
+        amount: parsed,
+      });
+    } catch {
+      // Parent shows validation errors (e.g. duplicate period).
+    }
   }
 
   const monthOptionsMemo = useMemo(() => monthOptions(), []);

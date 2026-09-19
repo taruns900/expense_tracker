@@ -1,5 +1,13 @@
-import { DESCRIPTION_MAX_LENGTH, GST_RATES, PAYMENT_METHODS, computeGstAmount } from '@expense-tracker/shared';
-import type { GstRate, PaymentMethod } from '@expense-tracker/shared';
+import {
+  DESCRIPTION_MAX_LENGTH,
+  GST_RATES,
+  PAYMENT_METHODS,
+  computeGstAmount,
+  expenseGrandTotal,
+  isPresetGstRate,
+  isValidGstRate,
+} from '@expense-tracker/shared';
+import type { PaymentMethod } from '@expense-tracker/shared';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
@@ -14,6 +22,8 @@ import { toIsoDate } from '@/utils/dates';
 import { formatInr } from '@/utils/money';
 import { toUserMessage } from '@/utils/userError';
 
+const GST_CUSTOM_OPTION_ID = 'custom';
+
 type Props = {
   initial?: ExpenseListItem | null;
   onSaved: (expense: ExpenseListItem) => void;
@@ -24,6 +34,14 @@ type Props = {
 export type ExpenseFormHandle = {
   submit: () => Promise<void>;
 };
+
+function initialGstCustomMode(rate: number | null | undefined): boolean {
+  return rate !== null && rate !== undefined && !isPresetGstRate(rate);
+}
+
+function parseAmount(value: string): number {
+  return Number(value.replace(/,/g, ''));
+}
 
 export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function ExpenseForm(
   { initial, onSaved, hideSubmit = false, onSavingChange },
@@ -36,7 +54,13 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(
     initial?.paymentMethod ?? null,
   );
-  const [gstRate, setGstRate] = useState<GstRate | null>(initial?.gstRate ?? null);
+  const [gstRate, setGstRate] = useState<number | null>(initial?.gstRate ?? null);
+  const [gstCustomMode, setGstCustomMode] = useState(initialGstCustomMode(initial?.gstRate));
+  const [customGstRate, setCustomGstRate] = useState(
+    initialGstCustomMode(initial?.gstRate) && initial?.gstRate !== null && initial?.gstRate !== undefined
+      ? String(initial.gstRate)
+      : '',
+  );
   const [gstAmount, setGstAmount] = useState(
     initial?.gstAmount !== null && initial?.gstAmount !== undefined ? String(initial.gstAmount) : '',
   );
@@ -65,7 +89,18 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
   }, [categoryId]);
 
   useEffect(() => {
-    const parsed = Number(amount.replace(/,/g, ''));
+    if (gstCustomMode) {
+      const parsedRate = Number(customGstRate.replace(/,/g, ''));
+      if (!isValidGstRate(parsedRate)) {
+        return;
+      }
+      setGstRate(parsedRate);
+      return;
+    }
+  }, [customGstRate, gstCustomMode]);
+
+  useEffect(() => {
+    const parsed = parseAmount(amount);
     if (gstRate === null || !Number.isFinite(parsed) || parsed <= 0) {
       return;
     }
@@ -73,7 +108,13 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
   }, [amount, gstRate]);
 
   async function save() {
-    const parsed = Number(amount.replace(/,/g, ''));
+    const parsed = parseAmount(amount);
+    const parsedGstAmount =
+      gstRate === null
+        ? null
+        : gstAmount.trim().length > 0
+          ? Number(gstAmount.replace(/,/g, ''))
+          : computeGstAmount(parsed, gstRate);
     const input: ExpenseInput = {
       amount: parsed,
       expenseDate: date,
@@ -84,7 +125,7 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
       description,
       billNumber,
       gstRate,
-      gstAmount: gstAmount ? Number(gstAmount) : null,
+      gstAmount: parsedGstAmount,
     };
     setSaving(true);
     onSavingChange?.(true);
@@ -106,6 +147,19 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
   const categoryName = categories.find((item) => item.id === categoryId)?.name ?? initial?.categoryName;
   const subName =
     subcategories.find((item) => item.id === subCategoryId)?.name ?? initial?.subCategoryName;
+
+  const parsedAmount = parseAmount(amount);
+  const parsedGst =
+    gstRate === null
+      ? 0
+      : gstAmount.trim().length > 0
+        ? Number(gstAmount.replace(/,/g, '')) || 0
+        : computeGstAmount(parsedAmount, gstRate);
+  const showTotal =
+    gstRate !== null && Number.isFinite(parsedAmount) && parsedAmount > 0 && Number.isFinite(parsedGst);
+
+  const gstModalSelectedId =
+    gstRate === null ? '' : isPresetGstRate(gstRate) ? String(gstRate) : GST_CUSTOM_OPTION_ID;
 
   return (
     <View style={[styles.form, hideSubmit && styles.formEmbedded]}>
@@ -157,6 +211,15 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
         placeholder="Optional"
         onPress={() => setOpen('gst')}
       />
+      {gstCustomMode ? (
+        <Input
+          label="Custom GST %"
+          value={customGstRate}
+          onChangeText={setCustomGstRate}
+          placeholder="e.g. 7.5"
+          keyboardType="decimal-pad"
+        />
+      ) : null}
       {gstRate !== null ? (
         <Input
           label="GST amount"
@@ -165,7 +228,11 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
           keyboardType="decimal-pad"
         />
       ) : null}
-      {gstAmount ? <Text style={styles.hint}>Computed {formatInr(Number(gstAmount) || 0)}</Text> : null}
+      {showTotal ? (
+        <Text style={styles.total}>
+          Total {formatInr(expenseGrandTotal(parsedAmount, parsedGst))} (amount + GST)
+        </Text>
+      ) : null}
       <Input label="Bill number" value={billNumber} onChangeText={setBillNumber} />
       <Input
         label="Description"
@@ -219,10 +286,29 @@ export const ExpenseForm = forwardRef<ExpenseFormHandle, Props>(function Expense
         options={[
           { id: '', label: 'None' },
           ...GST_RATES.map((rate) => ({ id: String(rate), label: `${rate}%` })),
+          { id: GST_CUSTOM_OPTION_ID, label: 'Custom %' },
         ]}
-        selectedId={gstRate === null ? '' : String(gstRate)}
+        selectedId={gstModalSelectedId}
         onClose={() => setOpen(null)}
-        onSelect={(id) => setGstRate(id === '' ? null : (Number(id) as GstRate))}
+        onSelect={(id) => {
+          if (id === '') {
+            setGstRate(null);
+            setGstCustomMode(false);
+            setCustomGstRate('');
+            setGstAmount('');
+            return;
+          }
+          if (id === GST_CUSTOM_OPTION_ID) {
+            setGstCustomMode(true);
+            if (customGstRate.trim().length === 0) {
+              setGstRate(null);
+            }
+            return;
+          }
+          setGstCustomMode(false);
+          setCustomGstRate('');
+          setGstRate(Number(id));
+        }}
       />
     </View>
   );
@@ -236,8 +322,8 @@ const styles = StyleSheet.create({
   formEmbedded: {
     paddingBottom: 0,
   },
-  hint: {
-    ...typography.caption,
-    color: colors.textSecondary,
+  total: {
+    ...typography.label,
+    color: colors.text,
   },
 });

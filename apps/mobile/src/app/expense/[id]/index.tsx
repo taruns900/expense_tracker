@@ -1,3 +1,4 @@
+import { expenseGrandTotal } from '@expense-tracker/shared';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -54,7 +55,12 @@ export default function ExpenseDetailScreen() {
     <View style={styles.wrap}>
       <Stack.Screen options={{ title: expense.expenseId }} />
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.amount}>{formatInr(expense.amount)}</Text>
+        <Text style={styles.amount}>
+          {formatInr(expenseGrandTotal(expense.amount, expense.gstAmount))}
+        </Text>
+        {expense.gstRate !== null ? (
+          <Text style={styles.subAmount}>Base amount {formatInr(expense.amount)}</Text>
+        ) : null}
         <Field label="Expense ID" value={expense.expenseId} />
         <Field label="Date" value={formatDisplayDate(expense.expenseDate)} />
         <Field label="Category" value={expense.categoryName} />
@@ -119,6 +125,11 @@ const styles = StyleSheet.create({
   amount: {
     ...typography.amount,
     color: colors.text,
+  },
+  subAmount: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: -spacing.xs,
   },
   field: {
     gap: 4,

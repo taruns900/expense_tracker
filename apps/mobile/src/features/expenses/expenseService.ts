@@ -1,5 +1,10 @@
-import { bumpExpenseIdSeconds, computeGstAmount, DESCRIPTION_MAX_LENGTH, formatExpenseId, GST_RATES } from '@expense-tracker/shared';
-import type { GstRate } from '@expense-tracker/shared';
+import {
+  bumpExpenseIdSeconds,
+  computeGstAmount,
+  DESCRIPTION_MAX_LENGTH,
+  formatExpenseId,
+  isValidGstRate,
+} from '@expense-tracker/shared';
 
 import { getDatabase, isDatabaseAvailable } from '@/database';
 import {
@@ -9,6 +14,7 @@ import {
   subCategoryRepository,
 } from '@/database/repositories';
 import { syncEngine } from '@/services/sync';
+import { useSessionStore } from '@/store';
 import type { ExpenseInput, ExpenseListItem, LocalExpense } from '@/types/expense';
 import type { ExpenseFilters } from '@/types/filters';
 import { toIsoDate } from '@/utils/dates';
@@ -70,10 +76,8 @@ async function validateInput(input: ExpenseInput, existing?: LocalExpense): Prom
     }
   }
 
-  if (input.gstRate !== null && input.gstRate !== undefined) {
-    if (!(GST_RATES as readonly number[]).includes(input.gstRate)) {
-      throw new UserFacingError('Please choose a valid GST rate.');
-    }
+  if (input.gstRate !== null && input.gstRate !== undefined && !isValidGstRate(input.gstRate)) {
+    throw new UserFacingError('Please enter a GST rate between 0% and 100%.');
   }
 }
 
@@ -86,7 +90,7 @@ function buildRecord(
   const gstAmount =
     gstRate === null
       ? null
-      : (input.gstAmount ?? computeGstAmount(input.amount, gstRate as GstRate));
+      : (input.gstAmount ?? computeGstAmount(input.amount, gstRate));
 
   return {
     id: base.id,
@@ -138,6 +142,7 @@ export const expenseService = {
       throw new UserFacingError("The expense couldn't be saved.");
     }
     syncEngine.request();
+    useSessionStore.getState().bumpDataEpoch();
     return saved;
   },
 
@@ -165,6 +170,7 @@ export const expenseService = {
       throw new UserFacingError("The expense couldn't be updated.");
     }
     syncEngine.request();
+    useSessionStore.getState().bumpDataEpoch();
     return saved;
   },
 
@@ -185,5 +191,6 @@ export const expenseService = {
       });
     });
     syncEngine.request();
+    useSessionStore.getState().bumpDataEpoch();
   },
 };

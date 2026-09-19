@@ -170,7 +170,7 @@ Home does not show a recent-expense list. Full history is **More → Expenses**.
 
 V1 values are computed from local SQLite. Optional later AI insights on payment history must not replace these widgets (see Future AI Insights).
 
-Home also shows **category-wise budget remaining** for budget periods that include today. Each line shows period type, period label, and **remaining only** (budget minus matching expenses in that period; negative values allowed). No global budget totals on Home.
+Home also shows **category-wise budget remaining** for **every budget** (same set as the Budget tab), grouped by category. Each line shows period type, period label, and **remaining only** (budget minus matching expenses in that period; negative values allowed and styled as over budget without hiding other lines). No global budget totals on Home.
 
 Bottom navigation: **Home**, **Budget**, **Add** (center), **Debt**, **More**.
 
@@ -684,7 +684,7 @@ gstRate
 gstAmount
 ```
 
-Supported common rates:
+Supported common preset rates:
 
 ```text
 0%
@@ -693,6 +693,10 @@ Supported common rates:
 18%
 28%
 ```
+
+Users may also enter a **custom GST %** between 0 and 100 (for example 7.5%).
+
+The **amount** field is the taxable base (exclusive of GST). **GST amount** is derived from rate × amount unless the user overrides it. **Totals** (expense list, detail headline, dashboard, budgets, PDF reports) use **amount + gstAmount** when GST is recorded.
 
 Example:
 
@@ -705,6 +709,9 @@ GST Rate
 
 GST Amount
 ₹1,800
+
+Total (amount + GST)
+₹11,800
 ```
 
 Detailed GST filing, government integration, and return generation are outside V1.

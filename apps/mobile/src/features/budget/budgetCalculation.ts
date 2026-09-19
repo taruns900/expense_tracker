@@ -1,8 +1,11 @@
-import { budgetRemaining, formatBudgetPeriodLabel, formatBudgetPeriodTypeLabel } from '@expense-tracker/shared';
-
+import {
+  BUDGET_PERIOD_TYPES,
+  budgetRemaining,
+  formatBudgetPeriodLabel,
+  formatBudgetPeriodTypeLabel,
+} from '@expense-tracker/shared';
 import { budgetRepository, expenseRepository } from '@/database/repositories';
 import type { BudgetListItem } from '@/types/budget';
-import { toIsoDate } from '@/utils/dates';
 
 export type BudgetWithRemaining = BudgetListItem & {
   remaining: number;
@@ -19,7 +22,11 @@ export type DashboardBudgetGroup = {
   }>;
 };
 
-export async function spentForBudget(budget: Pick<BudgetListItem, 'categoryId' | 'periodStart' | 'periodEnd'>): Promise<number> {
+const PERIOD_TYPE_RANK = new Map(BUDGET_PERIOD_TYPES.map((type, index) => [type, index]));
+
+export async function spentForBudget(
+  budget: Pick<BudgetListItem, 'categoryId' | 'periodStart' | 'periodEnd'>,
+): Promise<number> {
   return expenseRepository.sumForCategoryBetween(budget.categoryId, budget.periodStart, budget.periodEnd);
 }
 
@@ -33,43 +40,53 @@ export async function withRemaining(budget: BudgetListItem): Promise<BudgetWithR
 
 export async function listBudgetsWithRemaining(): Promise<BudgetWithRemaining[]> {
   const budgets = await budgetRepository.list();
-  return Promise.all(budgets.map((budget) => withRemaining(budget)));
+  const results = await Promise.allSettled(budgets.map((budget) => withRemaining(budget)));
+  return results
+    .filter((result): result is PromiseFulfilledResult<BudgetWithRemaining> => result.status === 'fulfilled')
+    .map((result) => result.value);
 }
 
-export async function dashboardBudgetGroups(now = new Date()): Promise<DashboardBudgetGroup[]> {
-  const today = toIsoDate(now);
-  const active = await budgetRepository.listActiveOnDate(today);
-  if (active.length === 0) {
+function sortBudgetsForDashboard(a: BudgetListItem, b: BudgetListItem): number {
+  const category = a.categoryName.localeCompare(b.categoryName, undefined, { sensitivity: 'base' });
+  if (category !== 0) {
+    return category;
+  }
+  const rankA = PERIOD_TYPE_RANK.get(a.periodType) ?? 99;
+  const rankB = PERIOD_TYPE_RANK.get(b.periodType) ?? 99;
+  if (rankA !== rankB) {
+    return rankA - rankB;
+  }
+  return a.periodStart.localeCompare(b.periodStart);
+}
+
+export async function dashboardBudgetGroups(): Promise<DashboardBudgetGroup[]> {
+  const budgets = await listBudgetsWithRemaining();
+  if (budgets.length === 0) {
     return [];
   }
 
-  const byCategory = new Map<string, DashboardBudgetGroup>();
-  const remainingByBudget = await Promise.all(
-    active.map(async (budget) => ({
-      budget,
-      remaining: budgetRemaining(budget.amount, await spentForBudget(budget)),
-    })),
-  );
+  budgets.sort(sortBudgetsForDashboard);
 
-  for (const item of remainingByBudget) {
-    const existing = byCategory.get(item.budget.categoryId);
+  const byCategory = new Map<string, DashboardBudgetGroup>();
+  for (const budget of budgets) {
     const line = {
-      budgetId: item.budget.id,
-      periodTypeLabel: formatBudgetPeriodTypeLabel(item.budget.periodType),
+      budgetId: budget.id,
+      periodTypeLabel: formatBudgetPeriodTypeLabel(budget.periodType),
       periodLabel: formatBudgetPeriodLabel(
-        item.budget.periodType,
-        item.budget.periodStart,
-        item.budget.periodEnd,
+        budget.periodType,
+        budget.periodStart,
+        budget.periodEnd,
       ),
-      remaining: item.remaining,
+      remaining: budget.remaining,
     };
+    const existing = byCategory.get(budget.categoryId);
     if (existing) {
       existing.lines.push(line);
       continue;
     }
-    byCategory.set(item.budget.categoryId, {
-      categoryId: item.budget.categoryId,
-      categoryName: item.budget.categoryName,
+    byCategory.set(budget.categoryId, {
+      categoryId: budget.categoryId,
+      categoryName: budget.categoryName,
       lines: [line],
     });
   }

@@ -1,9 +1,12 @@
-import type { GstRate, PaymentMethod, SyncStatus } from '@expense-tracker/shared';
+import type { PaymentMethod, SyncStatus } from '@expense-tracker/shared';
 
 import type { ExpenseListItem, LocalExpense } from '@/types/expense';
 import type { ExpenseFilters } from '@/types/filters';
 
 import { getDatabase, isDatabaseAvailable } from '../database';
+
+const EXPENSE_TOTAL_EXPR = '(amount + COALESCE(gst_amount, 0))';
+const EXPENSE_TOTAL_EXPR_ALIASED = '(e.amount + COALESCE(e.gst_amount, 0))';
 
 type ExpenseRow = {
   id: string;
@@ -37,7 +40,7 @@ function mapExpense(row: ExpenseRow): LocalExpense {
     amount: row.amount,
     description: row.description,
     vendorId: row.vendor_id,
-    gstRate: (row.gst_rate as GstRate | null) ?? null,
+    gstRate: row.gst_rate,
     gstAmount: row.gst_amount,
     paymentMethod: row.payment_method,
     billNumber: row.bill_number,
@@ -237,7 +240,7 @@ export const expenseRepository = {
       return 0;
     }
     const row = await getDatabase().getFirstAsync<{ total: number | null }>(
-      `SELECT SUM(amount) as total FROM expenses
+      `SELECT SUM(${EXPENSE_TOTAL_EXPR}) as total FROM expenses
        WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?`,
       from,
       to,
@@ -250,7 +253,7 @@ export const expenseRepository = {
       return 0;
     }
     const row = await getDatabase().getFirstAsync<{ total: number | null }>(
-      `SELECT SUM(amount) as total FROM expenses
+      `SELECT SUM(${EXPENSE_TOTAL_EXPR}) as total FROM expenses
        WHERE deleted_at IS NULL AND category_id = ? AND expense_date >= ? AND expense_date <= ?`,
       categoryId,
       from,
@@ -264,7 +267,7 @@ export const expenseRepository = {
       return [];
     }
     return getDatabase().getAllAsync(
-      `SELECT expense_date as date, SUM(amount) as total
+      `SELECT expense_date as date, SUM(${EXPENSE_TOTAL_EXPR}) as total
        FROM expenses
        WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
        GROUP BY expense_date`,
@@ -278,7 +281,7 @@ export const expenseRepository = {
       return [];
     }
     return getDatabase().getAllAsync(
-      `SELECT substr(expense_date, 1, 7) as yearMonth, SUM(amount) as total
+      `SELECT substr(expense_date, 1, 7) as yearMonth, SUM(${EXPENSE_TOTAL_EXPR}) as total
        FROM expenses
        WHERE deleted_at IS NULL AND expense_date >= ? AND expense_date <= ?
        GROUP BY substr(expense_date, 1, 7)`,
@@ -292,7 +295,7 @@ export const expenseRepository = {
       return [];
     }
     return getDatabase().getAllAsync(
-      `SELECT c.name as name, SUM(e.amount) as total
+      `SELECT c.name as name, SUM(${EXPENSE_TOTAL_EXPR_ALIASED}) as total
        FROM expenses e
        INNER JOIN categories c ON c.id = e.category_id
        WHERE e.deleted_at IS NULL AND e.expense_date >= ? AND e.expense_date <= ?

@@ -1,3 +1,4 @@
+import { expenseGrandTotal } from '@expense-tracker/shared';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -75,6 +76,12 @@ export const pdfService = {
       ${row('Expense ID', expense.expenseId)}
       ${row('Date', formatDisplayDate(expense.expenseDate))}
       ${row('Amount', formatInr(expense.amount))}
+      ${row(
+        'Total',
+        expense.gstRate !== null
+          ? formatInr(expenseGrandTotal(expense.amount, expense.gstAmount))
+          : null,
+      )}
       ${row('Category', expense.categoryName)}
       ${row('Subcategory', expense.subCategoryName)}
       ${row('Payment method', expense.paymentMethod)}
@@ -87,7 +94,10 @@ export const pdfService = {
 
   async shareReport(filters: ExpenseFilters, search?: string): Promise<void> {
     const expenses = await expenseService.list(filters, search);
-    const total = expenses.reduce((sum, item) => sum + item.amount, 0);
+    const total = expenses.reduce(
+      (sum, item) => sum + expenseGrandTotal(item.amount, item.gstAmount),
+      0,
+    );
     const period = [filters.dateFrom, filters.dateTo].filter(Boolean).join(' to ') || 'All dates';
     const rows = expenses
       .map(
@@ -96,7 +106,7 @@ export const pdfService = {
             <td>${escapeHtml(item.expenseId)}</td>
             <td>${escapeHtml(formatDisplayDate(item.expenseDate))}</td>
             <td>${escapeHtml(item.categoryName)}</td>
-            <td>${escapeHtml(formatInr(item.amount))}</td>
+            <td>${escapeHtml(formatInr(expenseGrandTotal(item.amount, item.gstAmount)))}</td>
           </tr>`,
       )
       .join('');

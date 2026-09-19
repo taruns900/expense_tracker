@@ -20,7 +20,7 @@ import { apiRequest, getAccessToken } from '@/services/api';
 import type { LocalExpense } from '@/types/expense';
 import { nowIso } from '@/utils/text';
 import { UserFacingError } from '@/utils/userError';
-import type { GstRate, PaymentMethod } from '@expense-tracker/shared';
+import type { PaymentMethod } from '@expense-tracker/shared';
 
 type SyncChange = {
   entityType: string;
@@ -335,7 +335,7 @@ async function applyRemoteChange(change: SyncChange): Promise<void> {
       amount: Number(data.amount ?? 0),
       description: data.description ? String(data.description) : null,
       vendorId: null,
-      gstRate: data.gstRate === null || data.gstRate === undefined ? null : (Number(data.gstRate) as GstRate),
+      gstRate: data.gstRate === null || data.gstRate === undefined ? null : Number(data.gstRate),
       gstAmount: data.gstAmount === null || data.gstAmount === undefined ? null : Number(data.gstAmount),
       paymentMethod: String(data.paymentMethod ?? 'Other') as PaymentMethod,
       billNumber: data.billNumber ? String(data.billNumber) : null,
